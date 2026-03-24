@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hybrid Attendance Pro</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <style>
+        body { font-family: sans-serif; margin: 0; background: #f0f2f5; text-align: center; }
+        .container { max-width: 500px; margin: auto; padding: 20px; }
+        #camera-wrapper { position: relative; width: 100%; border-radius: 20px; overflow: hidden; background: #000; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        #reader { width: 100%; }
+        canvas { position: absolute; top: 0; left: 0; pointer-events: none; }
+        .status-box { margin: 20px 0; padding: 15px; border-radius: 12px; font-weight: bold; background: white; }
+        .mode-indicator { font-size: 12px; color: #666; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Attendance Pro ⛪</h2>
+    <div class="mode-indicator">SYSTEM ACTIVE: QR & FACE ID</div>
+    
+    <div id="camera-wrapper">
+        <div id="reader"></div>
+        </div>
+
+    <div id="status" class="status-box">Loading AI Models...</div>
+    
+    <select id="dateSelect" style="width:100%; padding:10px; border-radius:8px; margin-bottom:10px;"></select>
+    <button onclick="location.reload()" style="padding:10px; border:none; background:none; color:#666; text-decoration:underline;">Restart Scanner</button>
+</div>
+
+<script>
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwAxnQgxbxPrG-75bKT_mqHLalPYY2fueedzKgeJSDq2Ekh0viLd8PtkV_m1cBs7bIFSg/exec";
+    let labeledFaceDescriptors = [];
+    let faceMatcher = null;
+    let isProcessing = false;
+
+    async function init() {
+        // 1. Load Models
+        const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
+        await Promise.all([
+            faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+            faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+        ]);
+
+        // 2. Load Member Face Data from Sheet
+        const resp = await fetch(SCRIPT_URL + "?action=getAllMembers");
+        const members = await resp.json();
+        
+        labeledFaceDescriptors = members.map(m => {
+            return new faceapi.LabeledFaceDescriptors(m.name, [new Float32Array(m.descriptor)]);
+        });
+        
+        if(labeledFaceDescriptors.length > 0) {
+            faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.5);
+        }
+
+        document.getElementById('status').innerText = "Ready to Scan";
+        startScanner();
+    }
+
+    function startScanner() {
+        const html5QrCode = new Html5Qrcode("reader");
+        html5QrCode.start(
+            { facingMode: "environment" }, 
+            { fps: 10, qrbox: 250 },
+            (qrCodeMessage) => { 
+                if(!isProcessing) markAttendance(qrCodeMessage, "QR"); 
+            }
+        );
+
+        // Start Face Detection Loop
+        setInterval(async () => {
+            if (isProcessing || !faceMatcher) return;
+            
+            const video = document.querySelector('video');
+            if(!video) return;
+
+            const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                .withFaceLandmarks()
+                .withFaceDescriptor();
+
+            if (detection) {
+                const result = faceMatcher.findBestMatch(detection.descriptor);
+                if (result.label !== 'unknown') {
+                    markAttendance(result.label, "FaceID");
+                }
+            }
+        }, 1000);
+    }
+
+    async function markAttendance(id, mode) {
+        isProcessing = true;
+        document.getElementById('status').innerText = `Verifying ${mode}...`;
+        
+        const date = new Date().toLocaleDateString('en-US'); // Matches your header format
+        const url = `${SCRIPT_URL}?action=mark&id=${encodeURIComponent(id)}&date=${encodeURIComponent(date)}`;
+        
+        try {
+            const resp = await fetch(url);
+            const txt = await resp.text();
+            document.getElementById('status').innerText = txt;
+            setTimeout(() => { isProcessing = false; document.getElementById('status').innerText = "Ready"; }, 3000);
+        } catch(e) {
+            isProcessing = false;
+        }
+    }
+
+    init();
+</script>
+</body>
+</html>
