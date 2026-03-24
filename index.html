@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Face Recognition Attendance | St. Joseph Church</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.15.0/dist/tf-core.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.15.0/dist/tf-converter.min.js"></script>
+    <!-- Load TensorFlow.js with WebGL backend first -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <style>
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -352,8 +352,14 @@
         
         try {
             updateDebug(attendanceDebugDiv, `Loading models from: ${MODEL_URL}`);
+            updateDebug(attendanceDebugDiv, `TensorFlow.js backend: ${tf.getBackend()}`);
             
-            // Load SSD MobileNet (main detection model) - NOT TinyFaceDetector
+            // Ensure WebGL backend is set
+            await tf.setBackend('webgl');
+            await tf.ready();
+            updateDebug(attendanceDebugDiv, `✅ TensorFlow.js backend: ${tf.getBackend()}`);
+            
+            // Load all required models
             await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
             updateProgress(attendanceProgress, 40);
             updateDebug(attendanceDebugDiv, "✓ SSD MobileNet loaded");
@@ -379,12 +385,12 @@
         }
     }
     
-    // Draw face detection with bounding box - Using SSD MobileNet (no TinyFaceDetector)
+    // Draw face detection with bounding box - Using SSD MobileNet
     async function drawFaceDetection(video, canvas, indicator) {
         if (!modelsLoaded || !video.videoWidth) return false;
         
         try {
-            // Use SSD MobileNet - this is the correct detector for your models
+            // Use SSD MobileNet with proper options
             const detection = await faceapi.detectSingleFace(video)
                 .withFaceLandmarks();
             
@@ -416,8 +422,12 @@
     // Continuous face detection loop
     function startDetectionLoop(video, canvas, indicator) {
         const loop = async () => {
-            if (video.videoWidth) {
-                await drawFaceDetection(video, canvas, indicator);
+            if (video.videoWidth && modelsLoaded) {
+                try {
+                    await drawFaceDetection(video, canvas, indicator);
+                } catch(e) {
+                    // Silent fail
+                }
             }
             animationFrameId = requestAnimationFrame(loop);
         };
@@ -437,7 +447,7 @@
             updateDebug(attendanceDebugDiv, `Attempt ${attempt}/6...`);
             
             try {
-                // Use SSD MobileNet for detection (no TinyFaceDetector)
+                // Use SSD MobileNet for detection
                 const detection = await faceapi.detectSingleFace(videoElement)
                     .withFaceLandmarks()
                     .withFaceDescriptor();
@@ -726,13 +736,17 @@
         registerFaceBtn.onclick = () => setMode("register");
         
         updateDebug(attendanceDebugDiv, "🚀 Starting application...");
+        
+        // Wait for TensorFlow to be ready
+        await tf.ready();
+        updateDebug(attendanceDebugDiv, `TensorFlow.js backend: ${tf.getBackend()}`);
+        
         await loadMembers();
         await loadFaceDescriptors();
         await loadModels();
         await startAttendanceCamera();
         
         updateDebug(attendanceDebugDiv, "✅ App ready! Look at camera - you should see a GREEN BOX around your face");
-        updateDebug(attendanceDebugDiv, "ℹ️ Using SSD MobileNet for face detection (more accurate)");
     }
     
     window.onload = init;
