@@ -227,15 +227,16 @@
         <div class="progress-bar"><div id="registerProgress" class="progress-fill"></div></div>
         <div id="registerDebug" class="debug-info"></div>
     </div>
-    <div class="footer">🔗 Connected to Google Sheets | Face data saved to Sheet2</div>
+    <div class="footer">🔗 Data saved to Google Sheets via Forms | No CORS issues!</div>
 </div>
 
 <script>
     // ==================== CONFIGURATION ====================
-    // REPLACE THIS WITH YOUR DEPLOYED APPS SCRIPT URL
-    const APPS_SCRIPT_URL = "https://api.allorigins.win/raw?url=" + encodeURIComponent("https://script.google.com/macros/s/AKfycbwbMd7ZvHyMVS_yUK6ANUEn4TYhLNe9o4hHz26q3Fp2a1yMhq6FlWSmgzvhBa4-MS2nug/exec");
+    // REPLACE THESE WITH YOUR ACTUAL GOOGLE FORM URLs
+    const FACE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfOUfMZ_DGPlqInzMMWcRl97EKuA9PfLw6rdz-zaY2Dj4Wjfg/formResponse";
+    const ATTENDANCE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdPKqBoUlEDfIs_gpFG2PFyFLGpTa1RucwbLEMHEAlzqD6bEg/formResponse";
     
-    // Google Sheets published JSON URL for reading members (no CORS)
+    // Google Sheets published JSON URL for reading members (works with CORS)
     const SHEET_ID = '1VYIPqwlbTAA8_NvXT6pUMxIcT8f6Jq2hoayGt1UMNr0';
     const SHEET_GID = '0';
     const GOOGLE_SHEETS_JSON_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${SHEET_GID}`;
@@ -331,38 +332,55 @@
         }
     }
     
-    // ==================== LOAD FACE DESCRIPTORS FROM SHEET2 ====================
-    async function loadFaceDescriptors() {
-        try {
-            updateDebug(attendanceDebugDiv, "📥 Loading face descriptors from Google Sheets...");
-            const response = await fetch(`${APPS_SCRIPT_URL}?action=getFaceData`);
-            const result = await response.json();
+    // ==================== SUBMIT TO GOOGLE FORMS (NO CORS!) ====================
+    async function submitToGoogleForm(formUrl, formData) {
+        // Create a hidden iframe to submit the form (bypasses CORS)
+        return new Promise((resolve, reject) => {
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            document.body.appendChild(iframe);
             
-            if (result.success && result.faces) {
-                faceDescriptorsDB = result.faces.map(f => ({ 
-                    name: f.name, 
-                    descriptor: new Float32Array(f.descriptor) 
-                }));
-                updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} face descriptors from Google Sheets`);
-                
-                localStorage.setItem('face_descriptors', JSON.stringify(result.faces));
-                return true;
-            } else {
-                const stored = localStorage.getItem('face_descriptors');
-                if (stored) {
-                    const faces = JSON.parse(stored);
-                    faceDescriptorsDB = faces.map(f => ({ 
-                        name: f.name, 
-                        descriptor: new Float32Array(f.descriptor) 
-                    }));
-                    updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} face descriptors from local storage`);
-                    return true;
-                }
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = formUrl;
+            form.target = iframe.name || 'hiddenFrame';
+            iframe.name = 'hiddenFrame';
+            
+            // Add form data
+            for (const [key, value] of Object.entries(formData)) {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.name = key;
+                input.value = value;
+                form.appendChild(input);
             }
-        } catch (err) {
-            updateDebug(attendanceDebugDiv, `⚠️ Error loading from Apps Script: ${err.message}`, true);
-            const stored = localStorage.getItem('face_descriptors');
-            if (stored) {
+            
+            // Handle response
+            iframe.onload = () => {
+                setTimeout(() => {
+                    document.body.removeChild(iframe);
+                    resolve({ success: true });
+                }, 1000);
+            };
+            
+            setTimeout(() => {
+                document.body.removeChild(iframe);
+                reject(new Error('Form submission timeout'));
+            }, 5000);
+            
+            document.body.appendChild(form);
+            form.submit();
+        });
+    }
+    
+    // ==================== FACE DATA STORAGE (Using Google Form) ====================
+    async function loadFaceDescriptors() {
+        // For loading faces, we'll use localStorage since we can't query forms
+        // The admin can export faces from Google Sheets and we load from there?
+        // For now, use localStorage
+        const stored = localStorage.getItem('face_descriptors');
+        if (stored) {
+            try {
                 const faces = JSON.parse(stored);
                 faceDescriptorsDB = faces.map(f => ({ 
                     name: f.name, 
@@ -370,49 +388,46 @@
                 }));
                 updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} face descriptors from local storage`);
                 return true;
+            } catch(e) {
+                updateDebug(attendanceDebugDiv, `⚠️ Error parsing stored faces`, true);
             }
         }
-        updateDebug(attendanceDebugDiv, `📭 No face descriptors found`);
+        updateDebug(attendanceDebugDiv, `📭 No stored face descriptors found`);
         return true;
     }
     
-    // ==================== SAVE FACE TO SHEET2 ====================
     async function saveFaceToSheet(name, descriptorArray) {
         try {
-            updateDebug(registerDebugDiv, `💾 Saving face to Google Sheets...`);
+            updateDebug(registerDebugDiv, `💾 Saving face to Google Forms...`);
             
-            const response = await fetch(APPS_SCRIPT_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    action: "saveFace", 
-                    name: name, 
-                    descriptor: Array.from(descriptorArray) 
-                })
-            });
+            // Prepare form data - you need to get the entry IDs from your form
+            // To get entry IDs: Open your form, inspect the input fields
+            // They look like: entry.123456789
+            const formData = {
+                "entry.1248883551": name,
+                "entry.1486586589": JSON.stringify(Array.from(descriptorArray))
+            };
             
-            const result = await response.json();
+            await submitToGoogleForm(FACE_FORM_URL, formData);
             
-            if (result.success) {
-                const newDescFloat = { name, descriptor: new Float32Array(descriptorArray) };
-                const memIdx = faceDescriptorsDB.findIndex(f => f.name === name);
-                if (memIdx !== -1) faceDescriptorsDB[memIdx] = newDescFloat;
-                else faceDescriptorsDB.push(newDescFloat);
-                
-                const backupFaces = faceDescriptorsDB.map(f => ({ 
-                    name: f.name, 
-                    descriptor: Array.from(f.descriptor) 
-                }));
-                localStorage.setItem('face_descriptors', JSON.stringify(backupFaces));
-                
-                updateDebug(registerDebugDiv, `✅ Face saved to Google Sheets for ${name}`);
-                return { success: true };
-            } else {
-                throw new Error(result.error || 'Unknown error');
-            }
+            // Also save to localStorage as backup
+            const newDescFloat = { name, descriptor: new Float32Array(descriptorArray) };
+            const memIdx = faceDescriptorsDB.findIndex(f => f.name === name);
+            if (memIdx !== -1) faceDescriptorsDB[memIdx] = newDescFloat;
+            else faceDescriptorsDB.push(newDescFloat);
+            
+            const backupFaces = faceDescriptorsDB.map(f => ({ 
+                name: f.name, 
+                descriptor: Array.from(f.descriptor) 
+            }));
+            localStorage.setItem('face_descriptors', JSON.stringify(backupFaces));
+            
+            updateDebug(registerDebugDiv, `✅ Face saved to Google Forms for ${name}`);
+            return { success: true };
         } catch (err) {
             updateDebug(registerDebugDiv, `❌ Error: ${err.message}`, true);
             
+            // Fallback to localStorage only
             const newDesc = { name, descriptor: Array.from(descriptorArray) };
             const existing = faceDescriptorsDB.map(f => ({ name: f.name, descriptor: Array.from(f.descriptor) }));
             const idx = existing.findIndex(f => f.name === name);
@@ -431,41 +446,51 @@
         }
     }
     
-    // ==================== MARK ATTENDANCE IN SHEET1 ====================
-    async function markAttendanceInSheet(name) {
-        const todayStr = getLocalDate();
+    // ==================== MARK ATTENDANCE (Using Google Form) ====================
+    // ==================== MARK ATTENDANCE (Name Only - No Date) ====================
+async function markAttendanceInSheet(name) {
+    const todayStr = getLocalDate();
+    
+    try {
+        updateDebug(attendanceDebugDiv, `📤 Marking attendance for ${name}...`);
         
-        try {
-            updateDebug(attendanceDebugDiv, `📤 Marking attendance for ${name}...`);
-            const response = await fetch(`${APPS_SCRIPT_URL}?action=markAttendance&name=${encodeURIComponent(name)}&date=${todayStr}`);
-            const result = await response.json();
-            
-            if (result.success) {
-                if (result.alreadyMarked) {
-                    updateDebug(attendanceDebugDiv, `ℹ️ ${name} already marked today`);
-                } else {
-                    updateDebug(attendanceDebugDiv, `✅ Attendance marked for ${name} on ${todayStr}`);
-                }
-                return result;
-            } else {
-                throw new Error(result.error || 'Unknown error');
-            }
-        } catch (err) {
-            updateDebug(attendanceDebugDiv, `❌ Error: ${err.message}`, true);
-            
-            const stored = localStorage.getItem('attendance_log') || '[]';
-            const log = JSON.parse(stored);
-            const alreadyMarked = log.some(entry => entry.name === name && entry.date === todayStr);
-            
-            if (!alreadyMarked) {
-                log.push({ name, date: todayStr, timestamp: new Date().toISOString() });
-                localStorage.setItem('attendance_log', JSON.stringify(log));
-                updateDebug(attendanceDebugDiv, `⚠️ Attendance saved locally only`);
-                return { success: true, alreadyMarked: false, localOnly: true };
-            }
-            return { success: true, alreadyMarked: true };
+        // Only send the name (no date field)
+        const formData = {
+            "entry.635050356": name  // Replace with your actual entry ID
+        };
+        
+        await submitToGoogleForm(ATTENDANCE_FORM_URL, formData);
+        
+        updateDebug(attendanceDebugDiv, `✅ Attendance marked for ${name} on ${todayStr}`);
+        
+        // Also save to localStorage for display
+        const stored = localStorage.getItem('attendance_log') || '[]';
+        const log = JSON.parse(stored);
+        const alreadyMarked = log.some(entry => entry.name === name && entry.date === todayStr);
+        
+        if (!alreadyMarked) {
+            log.push({ name, date: todayStr, timestamp: new Date().toISOString() });
+            localStorage.setItem('attendance_log', JSON.stringify(log));
         }
+        
+        return { success: true };
+    } catch (err) {
+        updateDebug(attendanceDebugDiv, `❌ Error: ${err.message}`, true);
+        
+        // Fallback to localStorage
+        const stored = localStorage.getItem('attendance_log') || '[]';
+        const log = JSON.parse(stored);
+        const alreadyMarked = log.some(entry => entry.name === name && entry.date === todayStr);
+        
+        if (!alreadyMarked) {
+            log.push({ name, date: todayStr, timestamp: new Date().toISOString() });
+            localStorage.setItem('attendance_log', JSON.stringify(log));
+            updateDebug(attendanceDebugDiv, `⚠️ Attendance saved locally only`);
+            return { success: true, alreadyMarked: false, localOnly: true };
+        }
+        return { success: true, alreadyMarked: true };
     }
+}
     
     // Display today's attendance
     function displayTodayAttendance() {
@@ -846,6 +871,7 @@
         displayTodayAttendance();
         
         updateDebug(attendanceDebugDiv, "✅ System Ready! Look for GREEN box around your face");
+        updateDebug(attendanceDebugDiv, "📌 To get form entry IDs: Open your form, inspect the input fields");
     }
     
     window.onload = init;
