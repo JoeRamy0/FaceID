@@ -7,7 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js"></script>
     <style>
-        /* Keep your existing styles - they are fine */
+        /* Your existing styles - keep them */
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body {
             background: linear-gradient(145deg, #f0f4fa 0%, #d9e2ef 100%);
@@ -172,7 +172,7 @@
             background: #f8f9fa;
             padding: 0.5rem;
             border-radius: 0.5rem;
-            max-height: 150px;
+            max-height: 200px;
             overflow-y: auto;
             font-family: monospace;
         }
@@ -309,9 +309,26 @@
     function formatDate(dateValue) {
         if (!dateValue) return '';
         try {
-            const d = new Date(dateValue);
+            // Handle various date formats
+            let d;
+            if (dateValue instanceof Date) {
+                d = dateValue;
+            } else if (typeof dateValue === 'string') {
+                // Try to parse the date string
+                d = new Date(dateValue);
+            } else if (typeof dateValue === 'number') {
+                d = new Date(dateValue);
+            } else {
+                return '';
+            }
+            
             if (isNaN(d.getTime())) return '';
-            return d.toISOString().split('T')[0];
+            
+            // Format as YYYY-MM-DD
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
         } catch(e) {
             return '';
         }
@@ -327,7 +344,7 @@
         const prefix = isError ? '❌' : '✅';
         element.innerHTML = `${prefix} [${timestamp}] ${message}<br>` + element.innerHTML;
         const lines = element.innerHTML.split('<br>');
-        if (lines.length > 20) element.innerHTML = lines.slice(0, 20).join('<br>');
+        if (lines.length > 25) element.innerHTML = lines.slice(0, 25).join('<br>');
         console.log(message);
     }
     
@@ -353,39 +370,88 @@
                 throw new Error('No header row found');
             }
             
+            // Debug: Log all header cells to see what we're getting
+            updateDebug(attendanceDebugDiv, `📋 Total columns in header: ${headerRow.c.length}`);
+            
             // Parse dates from header row (skip first column which is "الأسم")
             dateHeaders = [];
             for (let i = 1; i < headerRow.c.length; i++) {
                 const cell = headerRow.c[i];
                 if (cell && cell.v) {
-                    // Skip if the value is "العدد" or empty or not a date
                     const cellValue = cell.v.toString().trim();
-                    if (cellValue === 'العدد' || cellValue === 'Total' || cellValue === 'المجموع' || cellValue === '') {
+                    
+                    // Skip if it's a text label (not a date)
+                    if (cellValue === 'العدد' || cellValue === 'Total' || cellValue === 'المجموع' || 
+                        cellValue === 'الحضور' || cellValue === 'الغياب' || cellValue === 'نسبة' ||
+                        cellValue.includes('العدد')) {
                         continue;
                     }
                     
+                    // Try to parse as date
                     let dateValue = null;
+                    let parsedDate = null;
                     
-                    // Check if it's a date object or string
+                    // Check if it's a date object from Google Sheets
                     if (cell.v instanceof Date) {
                         dateValue = cell.v;
-                    } else if (typeof cell.v === 'string') {
-                        // Try to parse date string
-                        const parsed = new Date(cell.v);
-                        if (!isNaN(parsed.getTime())) {
-                            dateValue = parsed;
+                        parsedDate = formatDate(dateValue);
+                    } 
+                    // Check if it's a string that looks like a date
+                    else if (typeof cell.v === 'string') {
+                        // Try multiple date formats
+                        const datePatterns = [
+                            /^(\d{4})-(\d{2})-(\d{2})/,  // YYYY-MM-DD
+                            /^(\d{2})\/(\d{2})\/(\d{4})/,  // MM/DD/YYYY
+                            /^(\d{2})-(\d{2})-(\d{4})/,  // DD-MM-YYYY
+                            /^(\d{4})\/(\d{2})\/(\d{2})/   // YYYY/MM/DD
+                        ];
+                        
+                        let match = null;
+                        for (const pattern of datePatterns) {
+                            match = cellValue.match(pattern);
+                            if (match) break;
+                        }
+                        
+                        if (match) {
+                            let year, month, day;
+                            if (match[1].length === 4) {
+                                year = match[1];
+                                month = match[2];
+                                day = match[3];
+                            } else if (match[3].length === 4) {
+                                year = match[3];
+                                month = match[1];
+                                day = match[2];
+                            } else {
+                                continue;
+                            }
+                            parsedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                            dateValue = new Date(parsedDate);
+                        } else {
+                            // Try direct Date parsing
+                            const testDate = new Date(cellValue);
+                            if (!isNaN(testDate.getTime())) {
+                                dateValue = testDate;
+                                parsedDate = formatDate(dateValue);
+                            }
                         }
                     }
                     
-                    if (dateValue && !isNaN(dateValue.getTime())) {
+                    if (dateValue && !isNaN(dateValue.getTime()) && parsedDate && parsedDate !== '') {
                         dateHeaders.push({
                             column: i + 1, // 1-indexed column for API
                             date: dateValue,
-                            dateStr: formatDate(dateValue)
+                            dateStr: parsedDate
                         });
+                    } else if (cellValue && !cellValue.startsWith('=') && cellValue !== '') {
+                        // Debug: Log non-date cells
+                        updateDebug(attendanceDebugDiv, `⚠️ Skipping column ${i+1}: "${cellValue}" (not a date)`, false);
                     }
                 }
             }
+            
+            // Sort dates chronologically
+            dateHeaders.sort((a, b) => a.date - b.date);
             
             // Populate date dropdown
             attendanceDateSelect.innerHTML = '<option value="">-- Select Date --</option>';
@@ -398,7 +464,9 @@
             
             updateDebug(attendanceDebugDiv, `📅 Found ${dateHeaders.length} dates`);
             if (dateHeaders.length > 0) {
-                updateDebug(attendanceDebugDiv, `Dates: ${dateHeaders.slice(0, 10).map(d => d.dateStr).join(', ')}${dateHeaders.length > 10 ? '...' : ''}`);
+                const firstDates = dateHeaders.slice(0, 5).map(d => d.dateStr).join(', ');
+                const lastDates = dateHeaders.slice(-3).map(d => d.dateStr).join(', ');
+                updateDebug(attendanceDebugDiv, `Dates: ${firstDates} ... ${lastDates}`);
             } else {
                 updateDebug(attendanceDebugDiv, `⚠️ No dates found. Check your sheet header row.`, true);
             }
@@ -409,7 +477,7 @@
                 const row = rows[i];
                 if (row && row.c && row.c[0] && row.c[0].v) {
                     const name = row.c[0].v.toString().trim();
-                    if (name && name !== '' && name !== 'الأسم') {
+                    if (name && name !== '' && name !== 'الأسم' && !name.includes('اجمالي') && !name.includes('الحضور')) {
                         members.push({
                             name: name,
                             rowIndex: i + 1 // 1-indexed row for API
