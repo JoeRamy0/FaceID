@@ -680,8 +680,9 @@
         attendanceCanvas = document.getElementById('attendanceCanvas');
         registerVideo = document.getElementById('registerVideo');
         registerCanvas = document.getElementById('registerCanvas');
-            await tf.setBackend('webgl');
-            await tf.ready();
+           await tf.setBackend('cpu');
+await tf.ready();
+console.log('✅ TensorFlow backend:', tf.getBackend());
         function setupCanvas() {
             const wrapper = document.querySelector('.video-wrapper');
             if (wrapper) {
