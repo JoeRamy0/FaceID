@@ -7,7 +7,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js"></script>
     <style>
-        /* Your existing styles - keep them */
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body {
             background: linear-gradient(145deg, #f0f4fa 0%, #d9e2ef 100%);
@@ -19,7 +18,7 @@
             padding: 20px;
         }
         .app-container {
-            max-width: 700px;
+            max-width: 650px;
             width: 100%;
             background: rgba(255,255,255,0.95);
             border-radius: 2rem;
@@ -33,7 +32,6 @@
             text-align: center;
         }
         .header h1 { margin: 0; font-size: 1.6rem; }
-        .header p { margin: 0.3rem 0 0; font-size: 0.8rem; opacity: 0.9; }
         .mode-selector {
             display: flex;
             gap: 0.8rem;
@@ -172,7 +170,7 @@
             background: #f8f9fa;
             padding: 0.5rem;
             border-radius: 0.5rem;
-            max-height: 200px;
+            max-height: 150px;
             overflow-y: auto;
             font-family: monospace;
         }
@@ -223,10 +221,11 @@
             <button id="attendanceBackCam" class="cam-btn">📱 Back</button>
         </div>
         
+        <!-- Date Selector -->
         <div class="date-selector">
             <label>📅 Select Date for Attendance</label>
             <select id="attendanceDateSelect">
-                <option value="">-- Select Date --</option>
+                <option value="">-- Loading dates... --</option>
             </select>
         </div>
         
@@ -257,17 +256,18 @@
         <div class="progress-bar"><div id="registerProgress" class="progress-fill"></div></div>
         <div id="registerDebug" class="debug-info"></div>
     </div>
-    <div class="footer">🔗 Select date, then scan face to mark attendance | Data saved locally</div>
+    <div class="footer">🔗 Select date, then scan face to mark attendance directly in Sheet1</div>
 </div>
 
 <script>
     // ==================== CONFIGURATION ====================
+    // Google Apps Script URL - REPLACE WITH YOUR DEPLOYED URL
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbMd7ZvHyMVS_yUK6ANUEn4TYhLNe9o4hHz26q3Fp2a1yMhq6FlWSmgzvhBa4-MS2nug/exec";
+    
+    // Google Sheets published JSON URL for reading members and dates (no CORS)
     const SHEET_ID = '1VYIPqwlbTAA8_NvXT6pUMxIcT8f6Jq2hoayGt1UMNr0';
     const SHEET_GID = '0';
     const GOOGLE_SHEETS_JSON_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${SHEET_GID}`;
-    
-    // Apps Script URL - REPLACE WITH YOUR DEPLOYED URL
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/YOUR_APPS_SCRIPT_URL/exec";
     
     const MODEL_URL = './models';
     
@@ -309,22 +309,8 @@
     function formatDate(dateValue) {
         if (!dateValue) return '';
         try {
-            // Handle various date formats
-            let d;
-            if (dateValue instanceof Date) {
-                d = dateValue;
-            } else if (typeof dateValue === 'string') {
-                // Try to parse the date string
-                d = new Date(dateValue);
-            } else if (typeof dateValue === 'number') {
-                d = new Date(dateValue);
-            } else {
-                return '';
-            }
-            
+            const d = new Date(dateValue);
             if (isNaN(d.getTime())) return '';
-            
-            // Format as YYYY-MM-DD
             const year = d.getFullYear();
             const month = String(d.getMonth() + 1).padStart(2, '0');
             const day = String(d.getDate()).padStart(2, '0');
@@ -332,6 +318,12 @@
         } catch(e) {
             return '';
         }
+    }
+    
+    function getLocalDate() {
+        const d = new Date();
+        d.setHours(d.getHours() + 2);
+        return d.toISOString().slice(0, 10);
     }
     
     function updateStatus(element, message, type = 'info') {
@@ -344,7 +336,7 @@
         const prefix = isError ? '❌' : '✅';
         element.innerHTML = `${prefix} [${timestamp}] ${message}<br>` + element.innerHTML;
         const lines = element.innerHTML.split('<br>');
-        if (lines.length > 25) element.innerHTML = lines.slice(0, 25).join('<br>');
+        if (lines.length > 20) element.innerHTML = lines.slice(0, 20).join('<br>');
         console.log(message);
     }
     
@@ -364,14 +356,11 @@
             
             const rows = data.table.rows;
             
-            // Get the first row (header row) which contains dates
+            // Get the header row (first row)
             const headerRow = rows[0];
             if (!headerRow) {
                 throw new Error('No header row found');
             }
-            
-            // Debug: Log all header cells to see what we're getting
-            updateDebug(attendanceDebugDiv, `📋 Total columns in header: ${headerRow.c.length}`);
             
             // Parse dates from header row (skip first column which is "الأسم")
             dateHeaders = [];
@@ -380,72 +369,30 @@
                 if (cell && cell.v) {
                     const cellValue = cell.v.toString().trim();
                     
-                    // Skip if it's a text label (not a date)
+                    // Skip non-date headers (like "العدد", "Total", etc.)
                     if (cellValue === 'العدد' || cellValue === 'Total' || cellValue === 'المجموع' || 
                         cellValue === 'الحضور' || cellValue === 'الغياب' || cellValue === 'نسبة' ||
-                        cellValue.includes('العدد')) {
+                        cellValue.includes('العدد') || cellValue === '') {
                         continue;
                     }
                     
                     // Try to parse as date
                     let dateValue = null;
-                    let parsedDate = null;
-                    
-                    // Check if it's a date object from Google Sheets
                     if (cell.v instanceof Date) {
                         dateValue = cell.v;
-                        parsedDate = formatDate(dateValue);
-                    } 
-                    // Check if it's a string that looks like a date
-                    else if (typeof cell.v === 'string') {
-                        // Try multiple date formats
-                        const datePatterns = [
-                            /^(\d{4})-(\d{2})-(\d{2})/,  // YYYY-MM-DD
-                            /^(\d{2})\/(\d{2})\/(\d{4})/,  // MM/DD/YYYY
-                            /^(\d{2})-(\d{2})-(\d{4})/,  // DD-MM-YYYY
-                            /^(\d{4})\/(\d{2})\/(\d{2})/   // YYYY/MM/DD
-                        ];
-                        
-                        let match = null;
-                        for (const pattern of datePatterns) {
-                            match = cellValue.match(pattern);
-                            if (match) break;
-                        }
-                        
-                        if (match) {
-                            let year, month, day;
-                            if (match[1].length === 4) {
-                                year = match[1];
-                                month = match[2];
-                                day = match[3];
-                            } else if (match[3].length === 4) {
-                                year = match[3];
-                                month = match[1];
-                                day = match[2];
-                            } else {
-                                continue;
-                            }
-                            parsedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-                            dateValue = new Date(parsedDate);
-                        } else {
-                            // Try direct Date parsing
-                            const testDate = new Date(cellValue);
-                            if (!isNaN(testDate.getTime())) {
-                                dateValue = testDate;
-                                parsedDate = formatDate(dateValue);
-                            }
+                    } else if (typeof cell.v === 'string') {
+                        const parsed = new Date(cell.v);
+                        if (!isNaN(parsed.getTime())) {
+                            dateValue = parsed;
                         }
                     }
                     
-                    if (dateValue && !isNaN(dateValue.getTime()) && parsedDate && parsedDate !== '') {
+                    if (dateValue && !isNaN(dateValue.getTime())) {
                         dateHeaders.push({
                             column: i + 1, // 1-indexed column for API
                             date: dateValue,
-                            dateStr: parsedDate
+                            dateStr: formatDate(dateValue)
                         });
-                    } else if (cellValue && !cellValue.startsWith('=') && cellValue !== '') {
-                        // Debug: Log non-date cells
-                        updateDebug(attendanceDebugDiv, `⚠️ Skipping column ${i+1}: "${cellValue}" (not a date)`, false);
                     }
                 }
             }
@@ -463,13 +410,6 @@
             });
             
             updateDebug(attendanceDebugDiv, `📅 Found ${dateHeaders.length} dates`);
-            if (dateHeaders.length > 0) {
-                const firstDates = dateHeaders.slice(0, 5).map(d => d.dateStr).join(', ');
-                const lastDates = dateHeaders.slice(-3).map(d => d.dateStr).join(', ');
-                updateDebug(attendanceDebugDiv, `Dates: ${firstDates} ... ${lastDates}`);
-            } else {
-                updateDebug(attendanceDebugDiv, `⚠️ No dates found. Check your sheet header row.`, true);
-            }
             
             // Load members from rows (skip header row)
             const members = [];
@@ -495,7 +435,7 @@
         }
     }
     
-    // ==================== MARK ATTENDANCE VIA APPS SCRIPT ====================
+    // ==================== MARK ATTENDANCE IN SHEET1 VIA APPS SCRIPT ====================
     async function markAttendanceInSheet(name, rowIndex, columnIndex) {
         try {
             updateDebug(attendanceDebugDiv, `📤 Marking attendance for ${name} at row ${rowIndex}, column ${columnIndex}...`);
@@ -516,6 +456,65 @@
         } catch (err) {
             updateDebug(attendanceDebugDiv, `❌ Error: ${err.message}`, true);
             return { success: false, error: err.message };
+        }
+    }
+    
+    // ==================== FACE DATA STORAGE (Local) ====================
+    async function loadFaceDescriptors() {
+        const stored = localStorage.getItem('face_descriptors');
+        if (stored) {
+            try {
+                const faces = JSON.parse(stored);
+                faceDescriptorsDB = faces.map(f => ({ 
+                    name: f.name, 
+                    descriptor: new Float32Array(f.descriptor) 
+                }));
+                updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} face descriptors`);
+                return true;
+            } catch(e) {
+                updateDebug(attendanceDebugDiv, `⚠️ Error parsing stored faces`, true);
+            }
+        }
+        updateDebug(attendanceDebugDiv, `📭 No stored face descriptors found`);
+        return true;
+    }
+    
+    async function saveFaceToLocal(name, descriptorArray) {
+        try {
+            const newDesc = { name, descriptor: Array.from(descriptorArray) };
+            const existing = faceDescriptorsDB.map(f => ({ name: f.name, descriptor: Array.from(f.descriptor) }));
+            const idx = existing.findIndex(f => f.name === name);
+            if (idx !== -1) existing[idx] = newDesc;
+            else existing.push(newDesc);
+            
+            localStorage.setItem('face_descriptors', JSON.stringify(existing));
+            
+            const newDescFloat = { name, descriptor: new Float32Array(descriptorArray) };
+            const memIdx = faceDescriptorsDB.findIndex(f => f.name === name);
+            if (memIdx !== -1) faceDescriptorsDB[memIdx] = newDescFloat;
+            else faceDescriptorsDB.push(newDescFloat);
+            
+            updateDebug(registerDebugDiv, `✅ Face saved for ${name}`);
+            return { success: true };
+        } catch (err) {
+            updateDebug(registerDebugDiv, `❌ Error saving face: ${err.message}`, true);
+            return { success: false, error: err.message };
+        }
+    }
+    
+    // Display attendance for selected date from localStorage
+    function displayAttendanceForDate(selectedDateStr) {
+        const stored = localStorage.getItem('attendance_log') || '[]';
+        const log = JSON.parse(stored);
+        const dateAttendance = log.filter(entry => entry.date === selectedDateStr);
+        
+        attendanceResultDiv.innerHTML = '';
+        if (dateAttendance.length === 0) {
+            attendanceResultDiv.innerHTML = '<div style="text-align:center;color:#6c757d;">📋 No attendance recorded for this date</div>';
+        } else {
+            dateAttendance.forEach(entry => {
+                attendanceResultDiv.innerHTML += `<div class="attendance-item"><span>⛪ ${entry.name}</span><span class="badge">${entry.date}</span></div>`;
+            });
         }
     }
     
@@ -617,49 +616,6 @@
         }, 150);
     }
     
-    // ==================== FACE DESCRIPTORS ====================
-    async function loadFaceDescriptors() {
-        const stored = localStorage.getItem('face_descriptors');
-        if (stored) {
-            try {
-                const faces = JSON.parse(stored);
-                faceDescriptorsDB = faces.map(f => ({ 
-                    name: f.name, 
-                    descriptor: new Float32Array(f.descriptor) 
-                }));
-                updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} face descriptors`);
-                return true;
-            } catch(e) {
-                updateDebug(attendanceDebugDiv, `⚠️ Error parsing stored faces`, true);
-            }
-        }
-        updateDebug(attendanceDebugDiv, `📭 No stored face descriptors found`);
-        return true;
-    }
-    
-    async function saveFaceToLocal(name, descriptorArray) {
-        try {
-            const newDesc = { name, descriptor: Array.from(descriptorArray) };
-            const existing = faceDescriptorsDB.map(f => ({ name: f.name, descriptor: Array.from(f.descriptor) }));
-            const idx = existing.findIndex(f => f.name === name);
-            if (idx !== -1) existing[idx] = newDesc;
-            else existing.push(newDesc);
-            
-            localStorage.setItem('face_descriptors', JSON.stringify(existing));
-            
-            const newDescFloat = { name, descriptor: new Float32Array(descriptorArray) };
-            const memIdx = faceDescriptorsDB.findIndex(f => f.name === name);
-            if (memIdx !== -1) faceDescriptorsDB[memIdx] = newDescFloat;
-            else faceDescriptorsDB.push(newDescFloat);
-            
-            updateDebug(registerDebugDiv, `✅ Face saved for ${name}`);
-            return { success: true };
-        } catch (err) {
-            updateDebug(registerDebugDiv, `❌ Error saving face: ${err.message}`, true);
-            return { success: false, error: err.message };
-        }
-    }
-    
     function findBestMatch(descriptor, threshold = 0.6) {
         if (faceDescriptorsDB.length === 0) return null;
         
@@ -749,22 +705,6 @@
         startRegisterCamera();
     }
     
-    // ==================== DISPLAY ATTENDANCE ====================
-    function displayAttendanceForDate(selectedDateStr) {
-        const stored = localStorage.getItem('attendance_log') || '[]';
-        const log = JSON.parse(stored);
-        const todayAttendance = log.filter(entry => entry.date === selectedDateStr);
-        
-        attendanceResultDiv.innerHTML = '';
-        if (todayAttendance.length === 0) {
-            attendanceResultDiv.innerHTML = '<div style="text-align:center;color:#6c757d;">📋 No attendance recorded for this date</div>';
-        } else {
-            todayAttendance.forEach(entry => {
-                attendanceResultDiv.innerHTML += `<div class="attendance-item"><span>⛪ ${entry.name}</span><span class="badge">${entry.date}</span></div>`;
-            });
-        }
-    }
-    
     // ==================== ACTIONS ====================
     async function takeAttendance() {
         console.log("=== TAKE ATTENDANCE ===");
@@ -826,6 +766,14 @@
                     updateStatus(attendanceStatusDiv, `⚠️ ${match.name} already marked for ${selectedDateText}`, "warning");
                 } else {
                     updateStatus(attendanceStatusDiv, `✅ ${match.name} marked present for ${selectedDateText}`, "success");
+                    // Also save to localStorage for display
+                    const stored = localStorage.getItem('attendance_log') || '[]';
+                    const log = JSON.parse(stored);
+                    const alreadyMarked = log.some(entry => entry.name === match.name && entry.date === selectedDateText);
+                    if (!alreadyMarked) {
+                        log.push({ name: match.name, date: selectedDateText, timestamp: new Date().toISOString() });
+                        localStorage.setItem('attendance_log', JSON.stringify(log));
+                    }
                     displayAttendanceForDate(selectedDateText);
                 }
                 updateDebug(attendanceDebugDiv, `✓ Attendance marked for ${match.name}`);
@@ -968,7 +916,7 @@
         await startAttendanceCamera();
         
         updateDebug(attendanceDebugDiv, "✅ System Ready! Select a date, then look at camera");
-        updateDebug(attendanceDebugDiv, "📌 Face data saved locally");
+        updateDebug(attendanceDebugDiv, "📌 Face data saved locally, attendance marks Sheet1 directly");
     }
     
     window.onload = init;
