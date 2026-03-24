@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Face Recognition Attendance | St. Joseph Church</title>
     <!-- Use working versions from official CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.8.6/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js"></script>
     <style>
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body {
@@ -729,16 +729,18 @@ async function drawDetection(video, canvas, indicator) {
     registerCanvas = document.getElementById('registerCanvas');
 
     // 2. Setup TensorFlow Backend (The fix for the 'multiply' error)
-    try {
-        // 'webgl' is the most compatible and fastest for face-api.js
-        await tf.setBackend('webgl');
-        await tf.ready();
-        updateDebug(attendanceDebugDiv, `🚀 TF Backend: ${tf.getBackend().toUpperCase()}`);
-    } catch (e) {
-        updateDebug(attendanceDebugDiv, "⚠️ WebGL failed, switching to CPU...", true);
-        await tf.setBackend('cpu');
-        await tf.ready();
-    }
+   // Replace your current backend block with this:
+try {
+    // WebGL is much faster for church attendance (real-time)
+    await tf.setBackend('webgl');
+    await tf.ready();
+    updateDebug(attendanceDebugDiv, `🚀 Engine: WebGL (Fast Mode)`);
+} catch (e) {
+    console.warn("WebGL failed, falling back to CPU");
+    await tf.setBackend('cpu');
+    await tf.ready();
+    updateDebug(attendanceDebugDiv, `⚠️ Engine: CPU (Slow Mode)`);
+}
 
     // 3. Handle Canvas Responsiveness
    function setupCanvas() {
