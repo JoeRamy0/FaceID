@@ -1268,36 +1268,37 @@
         }
         
         // ============ FACE RECOGNITION FUNCTIONS ============
-        async function loadFaceModels() {
-            const statusDiv = document.getElementById('faceStatus');
-            if (!statusDiv) return;
-            
-            statusDiv.style.display = 'block';
-            statusDiv.innerHTML = '<span>📥 Loading face detection models...</span>';
-            statusDiv.innerHTML += '<br><span style="font-size: 10px;">This may take 10-20 seconds on first load</span>';
-            
-            try {
-                // Use the correct model URL from face-api.js CDN
-                const MODEL_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/models';
-                
-                await Promise.all([
-                    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-                ]);
-                
-                faceModelsLoaded = true;
-                statusDiv.innerHTML = '<span>✅ Face models loaded successfully!</span>';
-                setTimeout(() => {
-                    statusDiv.style.display = 'none';
-                }, 2000);
-                return true;
-            } catch (error) {
-                console.error('Error loading face models:', error);
-                statusDiv.innerHTML = '<span>❌ Failed to load face models. Check internet connection and refresh.</span>';
-                return false;
-            }
-        }
+       // Replace the loadFaceModels function with this version
+async function loadFaceModels() {
+    const statusDiv = document.getElementById('faceStatus');
+    if (!statusDiv) return;
+    
+    statusDiv.style.display = 'block';
+    statusDiv.innerHTML = '<span>📥 Loading face detection models...</span>';
+    statusDiv.innerHTML += '<br><span style="font-size: 10px;">This may take 10-20 seconds on first load</span>';
+    
+    // Use GitHub raw URLs for the models
+    const modelBaseUrl = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
+    
+    try {
+        await Promise.all([
+            faceapi.nets.tinyFaceDetector.loadFromUri(modelBaseUrl),
+            faceapi.nets.faceLandmark68Net.loadFromUri(modelBaseUrl),
+            faceapi.nets.faceRecognitionNet.loadFromUri(modelBaseUrl)
+        ]);
+        
+        faceModelsLoaded = true;
+        statusDiv.innerHTML = '<span>✅ Face models loaded successfully!</span>';
+        setTimeout(() => {
+            statusDiv.style.display = 'none';
+        }, 2000);
+        return true;
+    } catch (error) {
+        console.error('Error loading face models:', error);
+        statusDiv.innerHTML = '<span>❌ Failed to load face models. Please check your internet connection.</span>';
+        return false;
+    }
+}
         
         async function loadKnownFaces() {
             const config = getCurrentConfig();
