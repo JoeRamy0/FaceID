@@ -191,12 +191,6 @@
             color: #1e293b;
         }
 
-        .user-email {
-            font-size: 11px;
-            color: #64748b;
-            margin-top: 4px;
-        }
-
         .user-role-badge {
             display: inline-block;
             background: #2c7da0;
@@ -767,13 +761,9 @@
                     <input type="text" id="username" placeholder="Enter your username">
                 </div>
                 <div class="form-group">
-                    <label>📧 Email</label>
-                    <input type="email" id="email" placeholder="Enter your email">
+                    <label>🔒 Password</label>
+                    <input type="password" id="password" placeholder="Enter your password">
                 </div>
-                <div class="form-group">
-    <label>🔒 Password</label>
-    <input type="password" id="password" placeholder="Enter your password">
-</div>
                 <button class="login-btn" onclick="login()">🔐 Login</button>
             </div>
         </div>
@@ -789,7 +779,6 @@
                     <div class="user-avatar" id="userAvatar">👤</div>
                     <div class="user-details">
                         <div class="user-name" id="displayName"></div>
-                        <div class="user-email" id="displayEmail"></div>
                         <div class="user-role-badge" id="displayRole"></div>
                     </div>
                     <button class="logout-btn-side" onclick="logout()">🚪 Logout</button>
@@ -946,38 +935,34 @@
         const STORAGE_USER_KEY = 'attendance_user';
         
         // Default Sheets - Configure your sheets here
-       // Default Sheets - Configure your sheets here
-const DEFAULT_SHEETS = [
-    {
-        id: "sheet1",  // <-- ADD THIS LINE! This is the ID that matches allowedSheets
-        name: "Attendance Sheet",
-        url: "https://script.google.com/macros/s/AKfycbwAxnQgxbxPrG-75bKT_mqHLalPYY2fueedzKgeJSDq2Ekh0viLd8PtkV_m1cBs7bIFSg/exec",
-        sheetId: "1eLBj6T5M8toC9nBgZt70elYYrRjWYkdWzTkeKx-k5zA",
-        faceSheetId: "1eLBj6T5M8toC9nBgZt70elYYrRjWYkdWzTkeKx-k5zA",
-        groups: ["خدام", "تالتة بنين", "رابعة بنين", "تالتة بنات", "رابعة بنات"],
-        access: "full"
-    }
-];
+        const DEFAULT_SHEETS = [
+            {
+                id: "sheet1",
+                name: "Attendance Sheet",
+                url: "https://script.google.com/macros/s/AKfycbwAxnQgxbxPrG-75bKT_mqHLalPYY2fueedzKgeJSDq2Ekh0viLd8PtkV_m1cBs7bIFSg/exec",
+                sheetId: "1eLBj6T5M8toC9nBgZt70elYYrRjWYkdWzTkeKx-k5zA",
+                faceSheetId: "1eLBj6T5M8toC9nBgZt70elYYrRjWYkdWzTkeKx-k5zA",
+                groups: ["خدام", "تالتة بنين", "رابعة بنين", "تالتة بنات", "رابعة بنات"],
+                access: "full"
+            }
+        ];
         
-        // Users
-         const USERS = [
+        // Users - Username and Password only
+        const USERS = [
             {
                 username: "admin",
-                email: "admin@church.com",
-                password: "admin123",  // Simple password for demo
+                password: "admin123",
                 role: "Admin",
-                allowedSheets: ["sheet1"]  // Sheet IDs this user can access
+                allowedSheets: ["sheet1"]
             },
             {
                 username: "teacher",
-                email: "teacher@church.com", 
                 password: "teacher123",
                 role: "Teacher",
                 allowedSheets: ["sheet1"]
             },
             {
                 username: "youssef",
-                email: "youssef@church.com",
                 password: "youssef123",
                 role: "Admin",
                 allowedSheets: ["sheet1"]
@@ -1062,7 +1047,7 @@ const DEFAULT_SHEETS = [
                 currentDisplay.innerHTML = `📄 Active: ${currentSheet.name} (${currentGroups.length} groups)`;
             }
             
-            container.innerHTML = userSheets.map((sheet, index) => `
+            container.innerHTML = userSheets.map((sheet) => `
                 <div class="sheet-item ${currentSheet && currentSheet.id === sheet.id ? 'active' : ''}" onclick="selectSheet('${sheet.id}')">
                     <div class="sheet-info">
                         <div class="sheet-name">${escapeHtml(sheet.name)}</div>
@@ -1188,32 +1173,24 @@ const DEFAULT_SHEETS = [
         // ============ LOGIN FUNCTIONS ============
         function login() {
             const username = document.getElementById('username').value.trim();
-            const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('password') ? document.getElementById('password').value.trim() : '';
+            const password = document.getElementById('password').value.trim();
             const errorDiv = document.getElementById('loginError');
             
-            if (!username || !email) {
+            if (!username || !password) {
                 errorDiv.classList.remove('hidden');
-                errorDiv.innerHTML = '❌ Please enter both username and email';
+                errorDiv.innerHTML = '❌ Please enter both username and password';
                 return;
             }
             
-            // Find user by username and email
+            // Find user by username and password
             const user = USERS.find(u => 
                 u.username.toLowerCase() === username.toLowerCase() && 
-                u.email.toLowerCase() === email.toLowerCase()
+                u.password === password
             );
             
             if (!user) {
                 errorDiv.classList.remove('hidden');
-                errorDiv.innerHTML = '❌ Invalid credentials. Please check your username and email.';
-                return;
-            }
-            
-            // Optional password check (if you want to add password field)
-            if (user.password && password && user.password !== password) {
-                errorDiv.classList.remove('hidden');
-                errorDiv.innerHTML = '❌ Incorrect password.';
+                errorDiv.innerHTML = '❌ Invalid username or password';
                 return;
             }
             
@@ -1222,7 +1199,6 @@ const DEFAULT_SHEETS = [
             // Save session
             localStorage.setItem(STORAGE_USER_KEY, JSON.stringify({
                 username: user.username,
-                email: user.email,
                 role: user.role
             }));
             
@@ -1238,7 +1214,6 @@ const DEFAULT_SHEETS = [
                 avatar.innerHTML = user.username.charAt(0).toUpperCase();
             }
             document.getElementById('displayName').innerHTML = `${user.username}`;
-            document.getElementById('displayEmail').innerHTML = `${user.email}`;
             document.getElementById('displayRole').innerHTML = `${user.role}`;
             
             addLogToUI('System', `Welcome ${user.username}! You have access to ${getUserSheets().length} sheet(s)`, '✅');
@@ -1264,15 +1239,14 @@ const DEFAULT_SHEETS = [
             document.getElementById('absenceView').classList.add('hidden');
             document.getElementById('loginView').classList.remove('hidden');
             document.getElementById('username').value = '';
-            document.getElementById('email').value = '';
-            if (document.getElementById('password')) document.getElementById('password').value = '';
+            document.getElementById('password').value = '';
         }
         
         function checkSavedSession() {
             const saved = localStorage.getItem(STORAGE_USER_KEY);
             if (saved) {
                 const userData = JSON.parse(saved);
-                const user = USERS.find(u => u.username === userData.username && u.email === userData.email);
+                const user = USERS.find(u => u.username === userData.username);
                 if (user) {
                     currentUser = user;
                     loadSheets();
@@ -1285,20 +1259,12 @@ const DEFAULT_SHEETS = [
                         avatar.innerHTML = user.username.charAt(0).toUpperCase();
                     }
                     document.getElementById('displayName').innerHTML = `${user.username}`;
-                    document.getElementById('displayEmail').innerHTML = `${user.email}`;
                     document.getElementById('displayRole').innerHTML = `${user.role}`;
                     
                     addLogToUI('System', `Welcome back ${user.username}!`, '✅');
                 }
             }
         }
-        
-        // Add this to your login form in HTML (add password field)
-        // Add after email field:
-        // <div class="form-group">
-        //     <label>🔒 Password</label>
-        //     <input type="password" id="password" placeholder="Enter your password">
-        // </div>
         
         // ============ FACE RECOGNITION FUNCTIONS ============
         async function loadFaceModels() {
