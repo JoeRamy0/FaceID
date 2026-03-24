@@ -676,47 +676,75 @@
     
     // ==================== INITIALIZATION ====================
     async function init() {
-        attendanceVideo = document.getElementById('attendanceVideo');
-        attendanceCanvas = document.getElementById('attendanceCanvas');
-        registerVideo = document.getElementById('registerVideo');
-        registerCanvas = document.getElementById('registerCanvas');
-           await tf.setBackend('cpu');
-await tf.ready();
-console.log('✅ TensorFlow backend:', tf.getBackend());
-        function setupCanvas() {
-            const wrapper = document.querySelector('.video-wrapper');
-            if (wrapper) {
-                const rect = wrapper.getBoundingClientRect();
-                if (rect.width > 0) {
-                    attendanceCanvas.width = rect.width;
-                    attendanceCanvas.height = rect.height;
-                    registerCanvas.width = rect.width;
-                    registerCanvas.height = rect.height;
-                }
+    // 1. Initialize UI references
+    attendanceVideo = document.getElementById('attendanceVideo');
+    attendanceCanvas = document.getElementById('attendanceCanvas');
+    registerVideo = document.getElementById('registerVideo');
+    registerCanvas = document.getElementById('registerCanvas');
+
+    // 2. Setup TensorFlow Backend (The fix for the 'multiply' error)
+    try {
+        // 'webgl' is the most compatible and fastest for face-api.js
+        await tf.setBackend('webgl');
+        await tf.ready();
+        updateDebug(attendanceDebugDiv, `🚀 TF Backend: ${tf.getBackend().toUpperCase()}`);
+    } catch (e) {
+        updateDebug(attendanceDebugDiv, "⚠️ WebGL failed, switching to CPU...", true);
+        await tf.setBackend('cpu');
+        await tf.ready();
+    }
+
+    // 3. Handle Canvas Responsiveness
+    function setupCanvas() {
+        const wrapper = document.querySelector('.video-wrapper');
+        if (wrapper) {
+            const rect = wrapper.getBoundingClientRect();
+            if (rect.width > 0) {
+                attendanceCanvas.width = rect.width;
+                attendanceCanvas.height = rect.height;
+                registerCanvas.width = rect.width;
+                registerCanvas.height = rect.height;
             }
         }
-        setTimeout(setupCanvas, 100);
-        window.addEventListener('resize', setupCanvas);
-        
-        attendanceFrontCam.onclick = () => switchAttendanceCamera('user');
-        attendanceBackCam.onclick = () => switchAttendanceCamera('environment');
-        registerFrontCam.onclick = () => switchRegisterCamera('user');
-        registerBackCam.onclick = () => switchRegisterCamera('environment');
-        
-        captureAttendanceBtn.onclick = takeAttendance;
-        captureRegisterBtn.onclick = registerFace;
-        takeAttendanceBtn.onclick = () => setMode("attendance");
-        registerFaceBtn.onclick = () => setMode("register");
-        
-        updateDebug(attendanceDebugDiv, "🚀 Starting application...");
-        
-        await loadMembers();
-        await loadFaceDescriptors();
-        await loadModels();
-        await startAttendanceCamera();
-        
-        updateDebug(attendanceDebugDiv, "✅ App ready! Look for GREEN box around your face");
     }
+    
+    // Initial setup and listener for screen rotation/resize
+    setupCanvas();
+    window.addEventListener('resize', setupCanvas);
+
+    // 4. Bind Button Event Listeners
+    attendanceFrontCam.onclick = () => switchAttendanceCamera('user');
+    attendanceBackCam.onclick = () => switchAttendanceCamera('environment');
+    registerFrontCam.onclick = () => switchRegisterCamera('user');
+    registerBackCam.onclick = () => switchRegisterCamera('environment');
+    
+    captureAttendanceBtn.onclick = takeAttendance;
+    captureRegisterBtn.onclick = registerFace;
+    takeAttendanceBtn.onclick = () => setMode("attendance");
+    registerFaceBtn.onclick = () => setMode("register");
+
+    // 5. Load Data and AI Models
+    updateStatus(attendanceStatusDiv, "🛰️ Syncing with Google Sheets...", "info");
+    
+    try {
+        const membersLoaded = await loadMembers();
+        const facesLoaded = await loadFaceDescriptors();
+        
+        if (!membersLoaded || !facesLoaded) {
+            updateDebug(attendanceDebugDiv, "⚠️ Partial data loaded from Sheets", true);
+        }
+
+        const modelsStatus = await loadModels();
+        if (modelsStatus) {
+            updateDebug(attendanceDebugDiv, "✅ AI Models Loaded");
+            await startAttendanceCamera();
+            updateDebug(attendanceDebugDiv, "✅ System Ready");
+        }
+    } catch (err) {
+        updateDebug(attendanceDebugDiv, `FATAL: ${err.message}`, true);
+        updateStatus(attendanceStatusDiv, "❌ Initialization Failed", "error");
+    }
+}
     
     window.onload = init;
     window.onbeforeunload = () => {
