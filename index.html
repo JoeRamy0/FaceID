@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Face Recognition Attendance | St. Joseph Church</title>
-    <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.15.0/dist/tf-core.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.15.0/dist/tf-converter.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.15.0/dist/tf-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.15.0/dist/tf-converter.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -22,7 +22,7 @@
             padding: 20px;
         }
         .app-container {
-            max-width: 600px;
+            max-width: 650px;
             width: 100%;
             background: rgba(255,255,255,0.95);
             border-radius: 2rem;
@@ -35,10 +35,7 @@
             padding: 1.2rem;
             text-align: center;
         }
-        .header h1 {
-            margin: 0;
-            font-size: 1.6rem;
-        }
+        .header h1 { margin: 0; font-size: 1.6rem; }
         .mode-selector {
             display: flex;
             gap: 0.8rem;
@@ -57,18 +54,9 @@
             transition: 0.2s;
             font-size: 1rem;
         }
-        .mode-btn.active {
-            background: #1e3c72;
-            color: white;
-            border-color: #1e3c72;
-        }
-        .panel {
-            padding: 1.2rem;
-            display: none;
-        }
-        .panel.active-panel {
-            display: block;
-        }
+        .mode-btn.active { background: #1e3c72; color: white; border-color: #1e3c72; }
+        .panel { padding: 1.2rem; display: none; }
+        .panel.active-panel { display: block; }
         .video-wrapper {
             background: #000;
             border-radius: 1.5rem;
@@ -77,11 +65,7 @@
             margin-bottom: 1rem;
             position: relative;
         }
-        video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
+        video { width: 100%; height: 100%; object-fit: cover; }
         canvas {
             position: absolute;
             top: 0;
@@ -103,10 +87,7 @@
             margin-top: 0.5rem;
         }
         .btn-capture:active { transform: scale(0.97);}
-        .btn-capture:disabled {
-            background: #95a5a6;
-            cursor: not-allowed;
-        }
+        .btn-capture:disabled { background: #95a5a6; cursor: not-allowed; }
         .camera-selector {
             display: flex;
             gap: 0.5rem;
@@ -120,13 +101,8 @@
             border-radius: 2rem;
             font-size: 0.8rem;
             cursor: pointer;
-            transition: 0.2s;
         }
-        .cam-btn.active {
-            background: #1e3c72;
-            color: white;
-            border-color: #1e3c72;
-        }
+        .cam-btn.active { background: #1e3c72; color: white; }
         .status {
             background: #eef2f7;
             border-radius: 2rem;
@@ -136,31 +112,12 @@
             text-align: center;
             font-weight: 500;
         }
-        .status.error {
-            background: #fee2e2;
-            color: #c33;
-        }
-        .status.success {
-            background: #d4edda;
-            color: #155724;
-        }
-        .status.warning {
-            background: #fff3cd;
-            color: #856404;
-        }
-        .status.info {
-            background: #d1ecf1;
-            color: #0c5460;
-        }
-        .input-group {
-            margin-bottom: 1rem;
-        }
-        .input-group label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 0.3rem;
-            color: #1e4663;
-        }
+        .status.error { background: #fee2e2; color: #c33; }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.warning { background: #fff3cd; color: #856404; }
+        .status.info { background: #d1ecf1; color: #0c5460; }
+        .input-group { margin-bottom: 1rem; }
+        .input-group label { display: block; font-weight: 600; margin-bottom: 0.3rem; color: #1e4663; }
         .input-group input {
             width: 100%;
             padding: 0.8rem;
@@ -181,49 +138,23 @@
             margin: 0.3rem 0;
             padding: 0.5rem 0.8rem;
             border-radius: 2rem;
-            font-size: 0.85rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
-        .badge {
-            background: #2e7d32;
-            color: white;
-            border-radius: 20px;
-            padding: 0.2rem 0.8rem;
-            font-size: 0.75rem;
-        }
-        .progress-bar {
-            width: 100%;
-            height: 4px;
-            background: #e0e0e0;
-            border-radius: 2px;
-            margin-top: 8px;
-            overflow: hidden;
-        }
-        .progress-fill {
-            height: 100%;
-            background: #2c7da0;
-            width: 0%;
-            transition: width 0.3s;
-        }
-        .footer {
-            font-size: 0.7rem;
-            text-align: center;
-            background: #f1f5f9;
-            padding: 0.6rem;
-            color: #4a627a;
-        }
+        .badge { background: #2e7d32; color: white; border-radius: 20px; padding: 0.2rem 0.8rem; font-size: 0.75rem; }
+        .progress-bar { width: 100%; height: 4px; background: #e0e0e0; border-radius: 2px; margin-top: 8px; overflow: hidden; }
+        .progress-fill { height: 100%; background: #2c7da0; width: 0%; transition: width 0.3s; }
+        .footer { font-size: 0.7rem; text-align: center; background: #f1f5f9; padding: 0.6rem; color: #4a627a; }
         .debug-info {
             font-size: 0.7rem;
             color: #666;
             margin-top: 0.5rem;
             text-align: left;
-            word-break: break-all;
             background: #f8f9fa;
             padding: 0.5rem;
             border-radius: 0.5rem;
-            max-height: 120px;
+            max-height: 150px;
             overflow-y: auto;
             font-family: monospace;
         }
@@ -262,7 +193,6 @@
         <button id="registerFaceBtn" class="mode-btn">🆕 Register New Face</button>
     </div>
 
-    <!-- Attendance Panel -->
     <div id="attendancePanel" class="panel active-panel">
         <div class="video-wrapper">
             <video id="attendanceVideo" autoplay muted playsinline></video>
@@ -277,13 +207,10 @@
         <button id="captureAttendance" class="btn-capture">🔍 Recognize & Mark Attendance</button>
         <div id="attendanceStatus" class="status">⏳ Loading AI models...</div>
         <div class="progress-bar"><div id="attendanceProgress" class="progress-fill"></div></div>
-        <div id="attendanceResult" class="result-area">
-            <div style="text-align:center;color:#6c757d;">📋 Today's attendance will appear here</div>
-        </div>
+        <div id="attendanceResult" class="result-area"><div style="text-align:center;color:#6c757d;">📋 Today's attendance will appear here</div></div>
         <div id="attendanceDebug" class="debug-info"></div>
     </div>
 
-    <!-- Registration Panel -->
     <div id="registerPanel" class="panel">
         <div class="video-wrapper">
             <video id="registerVideo" autoplay muted playsinline></video>
@@ -304,17 +231,12 @@
         <div class="progress-bar"><div id="registerProgress" class="progress-fill"></div></div>
         <div id="registerDebug" class="debug-info"></div>
     </div>
-    <div class="footer">
-        🔗 Connected to Google Sheets | Make sure 'models' folder is in the same directory
-    </div>
+    <div class="footer">🔗 Connected to Google Sheets | Make sure models are in './models' folder</div>
 </div>
 
 <script>
     // ==================== CONFIGURATION ====================
-    // REPLACE WITH YOUR ACTUAL GOOGLE APPS SCRIPT URL
     const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbMd7ZvHyMVS_yUK6ANUEn4TYhLNe9o4hHz26q3Fp2a1yMhq6FlWSmgzvhBa4-MS2nug/exec";
-    
-    // IMPORTANT: Models are loaded from local './models' folder
     const MODEL_URL = './models';
     
     // ==================== GLOBALS ====================
@@ -325,8 +247,6 @@
     let faceDescriptorsDB = [];
     let isProcessing = false;
     let animationFrameId = null;
-    
-    // Camera settings
     let currentAttendanceCamera = 'user';
     let currentRegisterCamera = 'user';
     
@@ -347,14 +267,11 @@
     const registerProgress = document.getElementById('registerProgress');
     const attendanceFaceIndicator = document.getElementById('attendanceFaceIndicator');
     const registerFaceIndicator = document.getElementById('registerFaceIndicator');
-    
-    // Camera buttons
     const attendanceFrontCam = document.getElementById('attendanceFrontCam');
     const attendanceBackCam = document.getElementById('attendanceBackCam');
     const registerFrontCam = document.getElementById('registerFrontCam');
     const registerBackCam = document.getElementById('registerBackCam');
     
-    // Helper: Get local date
     function getLocalDate() {
         const d = new Date();
         d.setHours(d.getHours() + 2);
@@ -368,7 +285,7 @@
     
     function updateDebug(element, message, isError = false) {
         const timestamp = new Date().toLocaleTimeString();
-        const prefix = isError ? '❌' : 'ℹ️';
+        const prefix = isError ? '❌' : '✅';
         element.innerHTML = `${prefix} [${timestamp}] ${message}<br>` + element.innerHTML;
         const lines = element.innerHTML.split('<br>');
         if (lines.length > 20) element.innerHTML = lines.slice(0, 20).join('<br>');
@@ -383,10 +300,7 @@
     async function fetchFromSheets(action, payload = {}) {
         try {
             const params = new URLSearchParams({action, ...payload});
-            const response = await fetch(`${GOOGLE_SCRIPT_URL}?${params.toString()}`, {
-                method: 'GET',
-                mode: 'cors'
-            });
+            const response = await fetch(`${GOOGLE_SCRIPT_URL}?${params.toString()}`, { method: 'GET' });
             return await response.json();
         } catch (err) {
             updateDebug(attendanceDebugDiv, `Error: ${err.message}`, true);
@@ -399,11 +313,7 @@
             const response = await fetch(GOOGLE_SCRIPT_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: "saveFace",
-                    name: name,
-                    descriptor: Array.from(descriptorArray)
-                })
+                body: JSON.stringify({ action: "saveFace", name: name, descriptor: Array.from(descriptorArray) })
             });
             return await response.json();
         } catch (err) {
@@ -416,7 +326,7 @@
         const res = await fetchFromSheets("getMembers");
         if(res?.success && res.members) {
             membersList = res.members;
-            updateDebug(attendanceDebugDiv, `✅ Loaded ${membersList.length} members`);
+            updateDebug(attendanceDebugDiv, `Loaded ${membersList.length} members`);
             return true;
         }
         return false;
@@ -425,11 +335,8 @@
     async function loadFaceDescriptors() {
         const res = await fetchFromSheets("getFaceData");
         if(res?.success && res.faces) {
-            faceDescriptorsDB = res.faces.map(f => ({
-                name: f.name,
-                descriptor: new Float32Array(f.descriptor)
-            }));
-            updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} face descriptors`);
+            faceDescriptorsDB = res.faces.map(f => ({ name: f.name, descriptor: new Float32Array(f.descriptor) }));
+            updateDebug(attendanceDebugDiv, `Loaded ${faceDescriptorsDB.length} face descriptors`);
             return true;
         }
         return false;
@@ -443,367 +350,340 @@
     async function loadModels() {
         if(modelsLoaded) return true;
         
-        updateStatus(attendanceStatusDiv, "📥 Loading AI models from local folder...", "info");
-        updateStatus(registerStatusDiv, "📥 Loading AI models from local folder...", "info");
+        updateStatus(attendanceStatusDiv, "📥 Loading AI models...", "info");
         updateProgress(attendanceProgress, 10);
         
         try {
-            updateDebug(attendanceDebugDiv, `Loading models from: ${MODEL_URL}`);
-            
-            // Check if models folder exists
-            const testModel = await fetch(`${MODEL_URL}/ssd_mobilenetv1_model-weights_manifest.json`);
-            if (!testModel.ok) {
-                throw new Error(`Models not found in ${MODEL_URL}. Please download models to the 'models' folder.`);
-            }
+            updateDebug(attendanceDebugDiv, `Loading from: ${MODEL_URL}`);
             
             await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
             updateProgress(attendanceProgress, 40);
-            updateDebug(attendanceDebugDiv, "✅ SSD MobileNet loaded");
+            updateDebug(attendanceDebugDiv, "SSD MobileNet loaded");
             
             await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
             updateProgress(attendanceProgress, 70);
-            updateDebug(attendanceDebugDiv, "✅ Face Landmark loaded");
+            updateDebug(attendanceDebugDiv, "Face Landmark loaded");
             
             await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
             updateProgress(attendanceProgress, 100);
-            updateDebug(attendanceDebugDiv, "✅ Face Recognition loaded");
+            updateDebug(attendanceDebugDiv, "Face Recognition loaded");
             
             modelsLoaded = true;
-            updateStatus(attendanceStatusDiv, "✅ Models ready! Click to recognize", "success");
-            updateStatus(registerStatusDiv, "✅ Models ready! You can register faces", "success");
+            updateStatus(attendanceStatusDiv, "✅ Models ready!", "success");
+            updateStatus(registerStatusDiv, "✅ Models ready!", "success");
             
             setTimeout(() => updateProgress(attendanceProgress, 0), 1000);
             return true;
         } catch(e) {
-            console.error("Model load error:", e);
-            updateDebug(attendanceDebugDiv, `❌ Error loading models: ${e.message}`, true);
-            updateStatus(attendanceStatusDiv, `❌ Models not found. Make sure 'models' folder exists with all model files.`, "error");
-            updateStatus(registerStatusDiv, `❌ Models not found. Make sure 'models' folder exists.`, "error");
+            updateDebug(attendanceDebugDiv, `ERROR: ${e.message}`, true);
+            updateStatus(attendanceStatusDiv, `❌ Failed: ${e.message}`, "error");
             return false;
         }
     }
     
-    // Continuous face detection
-    async function startFaceDetection(video, canvas, indicator) {
-        if (!modelsLoaded) return;
+    // Draw face detection on canvas
+    async function drawFaceDetection(video, canvas) {
+        if (!modelsLoaded || !video.videoWidth) return;
         
-        const detectAndDraw = async () => {
-            if (!video.videoWidth || !video.videoHeight) {
-                if (animationFrameId) requestAnimationFrame(detectAndDraw);
+        try {
+            const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions());
+            const displaySize = { width: video.videoWidth, height: video.videoHeight };
+            faceapi.matchDimensions(canvas, displaySize);
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (detection) {
+                const resized = faceapi.resizeResults(detection, displaySize);
+                faceapi.draw.drawDetections(canvas, [resized]);
+                return true;
+            }
+            return false;
+        } catch(e) {
+            return false;
+        }
+    }
+    
+    // Start continuous face detection animation
+    function startFaceDetectionLoop(video, canvas, indicator) {
+        let lastFaceDetected = false;
+        
+        const detectLoop = async () => {
+            if (!video.videoWidth) {
+                animationFrameId = requestAnimationFrame(detectLoop);
                 return;
             }
             
             try {
-                const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-                    .withFaceLandmarks();
+                const hasFace = await drawFaceDetection(video, canvas);
                 
-                const displaySize = { width: video.videoWidth, height: video.videoHeight };
-                faceapi.matchDimensions(canvas, displaySize);
-                const ctx = canvas.getContext('2d');
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                
-                if (detection) {
-                    const resizedDetection = faceapi.resizeResults(detection, displaySize);
-                    faceapi.draw.drawDetections(canvas, [resizedDetection]);
-                    
+                if (hasFace && !lastFaceDetected) {
                     if (indicator) {
                         indicator.innerHTML = '✅ Face detected!';
                         indicator.style.background = 'rgba(46, 125, 50, 0.9)';
                     }
-                } else {
+                    updateDebug(attendanceDebugDiv, "Face detected in video!", false);
+                } else if (!hasFace && lastFaceDetected) {
                     if (indicator) {
                         indicator.innerHTML = '🔍 No face detected';
                         indicator.style.background = 'rgba(0,0,0,0.7)';
                     }
                 }
-            } catch(e) {}
+                lastFaceDetected = hasFace;
+            } catch(e) {
+                // Silent fail
+            }
             
-            animationFrameId = requestAnimationFrame(detectAndDraw);
+            animationFrameId = requestAnimationFrame(detectLoop);
         };
         
-        detectAndDraw();
+        detectLoop();
     }
     
-    async function getFaceDescriptorFromVideo(videoElement) {
-        if(!videoElement.videoWidth || !videoElement.videoHeight) {
+    async function getFaceDescriptor(videoElement) {
+        if (!videoElement.videoWidth) {
+            updateDebug(attendanceDebugDiv, "Video not ready", true);
             return null;
         }
         
-        for (let attempt = 0; attempt < 3; attempt++) {
+        updateDebug(attendanceDebugDiv, "Attempting to detect face...");
+        
+        // Try multiple times with longer delay
+        for (let attempt = 1; attempt <= 5; attempt++) {
+            updateDebug(attendanceDebugDiv, `Attempt ${attempt}/5...`);
+            
             const detection = await faceapi.detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions())
                 .withFaceLandmarks()
                 .withFaceDescriptor();
             
-            if (detection) {
+            if (detection && detection.descriptor) {
+                updateDebug(attendanceDebugDiv, `✅ Face detected! Descriptor length: ${detection.descriptor.length}`);
                 return detection.descriptor;
             }
-            await new Promise(r => setTimeout(r, 500));
+            
+            await new Promise(r => setTimeout(r, 800));
         }
+        
+        updateDebug(attendanceDebugDiv, "❌ No face detected after 5 attempts", true);
         return null;
     }
     
     function findBestMatch(descriptor, threshold = 0.6) {
-        if(faceDescriptorsDB.length === 0) return null;
+        if (faceDescriptorsDB.length === 0) {
+            updateDebug(attendanceDebugDiv, "No registered faces in database", true);
+            return null;
+        }
         
         let bestMatch = null;
         let bestDistance = Infinity;
         
-        for(const person of faceDescriptorsDB) {
+        for (const person of faceDescriptorsDB) {
             const distance = faceapi.euclideanDistance(descriptor, person.descriptor);
-            if(distance < bestDistance) {
+            updateDebug(attendanceDebugDiv, `${person.name}: distance = ${distance.toFixed(4)}`);
+            
+            if (distance < bestDistance) {
                 bestDistance = distance;
                 bestMatch = person;
             }
         }
         
-        updateDebug(attendanceDebugDiv, `Best match: ${bestMatch?.name} (distance: ${bestDistance.toFixed(3)})`);
-        return bestDistance <= threshold ? bestMatch : null;
+        updateDebug(attendanceDebugDiv, `Best match: ${bestMatch?.name} (distance: ${bestDistance.toFixed(4)}, threshold: ${threshold})`);
+        
+        if (bestDistance <= threshold) {
+            return bestMatch;
+        }
+        return null;
     }
     
     // ==================== CAMERA SETUP ====================
-    async function startCamera(element, cameraType) {
+    async function startCamera(videoElement, cameraType) {
         try {
-            const constraints = {
+            const constraints = { 
                 video: { 
                     facingMode: { exact: cameraType },
                     width: { ideal: 640 },
                     height: { ideal: 480 }
                 } 
             };
-            
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            element.srcObject = stream;
-            await element.play();
+            videoElement.srcObject = stream;
+            await videoElement.play();
             return stream;
         } catch(err) {
-            // Try without exact constraint
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            element.srcObject = stream;
-            await element.play();
+            videoElement.srcObject = stream;
+            await videoElement.play();
             return stream;
         }
     }
     
-    async function startCameraForAttendance(cameraType = currentAttendanceCamera) {
-        if(attendanceStream) {
-            attendanceStream.getTracks().forEach(t => t.stop());
-        }
-        
-        attendanceStream = await startCamera(attendanceVideo, cameraType);
-        if(attendanceStream) {
-            const cameraInfo = document.getElementById('attendanceCameraInfo');
-            if(cameraInfo) {
-                cameraInfo.innerHTML = cameraType === 'user' ? '🤳 Front' : '📱 Back';
-            }
-            updateDebug(attendanceDebugDiv, `✅ Camera started (${cameraType === 'user' ? 'Front' : 'Back'})`);
-            startFaceDetection(attendanceVideo, attendanceCanvas, attendanceFaceIndicator);
+    async function startAttendanceCamera() {
+        if (attendanceStream) attendanceStream.getTracks().forEach(t => t.stop());
+        attendanceStream = await startCamera(attendanceVideo, currentAttendanceCamera);
+        if (attendanceStream) {
+            const info = document.getElementById('attendanceCameraInfo');
+            if (info) info.innerHTML = currentAttendanceCamera === 'user' ? '🤳 Front' : '📱 Back';
+            updateDebug(attendanceDebugDiv, `Camera started: ${currentAttendanceCamera === 'user' ? 'Front' : 'Back'}`);
+            startFaceDetectionLoop(attendanceVideo, attendanceCanvas, attendanceFaceIndicator);
             return true;
         }
         return false;
     }
     
-    async function startCameraForRegister(cameraType = currentRegisterCamera) {
-        if(registerStream) {
-            registerStream.getTracks().forEach(t => t.stop());
-        }
-        
-        registerStream = await startCamera(registerVideo, cameraType);
-        if(registerStream) {
-            const cameraInfo = document.getElementById('registerCameraInfo');
-            if(cameraInfo) {
-                cameraInfo.innerHTML = cameraType === 'user' ? '🤳 Front' : '📱 Back';
-            }
-            updateDebug(registerDebugDiv, `✅ Camera started (${cameraType === 'user' ? 'Front' : 'Back'})`);
-            startFaceDetection(registerVideo, registerCanvas, registerFaceIndicator);
+    async function startRegisterCamera() {
+        if (registerStream) registerStream.getTracks().forEach(t => t.stop());
+        registerStream = await startCamera(registerVideo, currentRegisterCamera);
+        if (registerStream) {
+            const info = document.getElementById('registerCameraInfo');
+            if (info) info.innerHTML = currentRegisterCamera === 'user' ? '🤳 Front' : '📱 Back';
+            updateDebug(registerDebugDiv, `Camera started: ${currentRegisterCamera === 'user' ? 'Front' : 'Back'}`);
+            startFaceDetectionLoop(registerVideo, registerCanvas, registerFaceIndicator);
             return true;
         }
         return false;
     }
     
-    async function switchAttendanceCamera(cameraType) {
+    function switchAttendanceCamera(cameraType) {
         currentAttendanceCamera = cameraType;
         attendanceFrontCam.classList.remove('active');
         attendanceBackCam.classList.remove('active');
-        if(cameraType === 'user') attendanceFrontCam.classList.add('active');
+        if (cameraType === 'user') attendanceFrontCam.classList.add('active');
         else attendanceBackCam.classList.add('active');
-        await startCameraForAttendance(cameraType);
+        startAttendanceCamera();
     }
     
-    async function switchRegisterCamera(cameraType) {
+    function switchRegisterCamera(cameraType) {
         currentRegisterCamera = cameraType;
         registerFrontCam.classList.remove('active');
         registerBackCam.classList.remove('active');
-        if(cameraType === 'user') registerFrontCam.classList.add('active');
+        if (cameraType === 'user') registerFrontCam.classList.add('active');
         else registerBackCam.classList.add('active');
-        await startCameraForRegister(cameraType);
+        startRegisterCamera();
     }
     
-    // ==================== ATTENDANCE ACTION ====================
+    // ==================== ACTIONS ====================
     async function takeAttendance() {
-        console.log("TAKE ATTENDANCE CLICKED");
-        
-        if(isProcessing) {
-            updateStatus(attendanceStatusDiv, "⏳ Please wait...", "warning");
-            return;
-        }
-        
-        if(!modelsLoaded) {
-            await loadModels();
-            if(!modelsLoaded) return;
-        }
-        
-        if(!attendanceVideo.videoWidth) {
-            updateStatus(attendanceStatusDiv, "📷 Starting camera...", "info");
-            await startCameraForAttendance(currentAttendanceCamera);
+        console.log("TAKE ATTENDANCE");
+        if (isProcessing) { updateStatus(attendanceStatusDiv, "Please wait...", "warning"); return; }
+        if (!modelsLoaded) { await loadModels(); if (!modelsLoaded) return; }
+        if (!attendanceVideo.videoWidth) {
+            await startAttendanceCamera();
             setTimeout(() => takeAttendance(), 1500);
             return;
         }
         
         isProcessing = true;
         captureAttendanceBtn.disabled = true;
-        updateStatus(attendanceStatusDiv, "🔍 Detecting face... (wait 2-3 seconds)", "info");
+        updateStatus(attendanceStatusDiv, "🔍 Detecting face...", "info");
         
         try {
-            await new Promise(r => setTimeout(r, 500));
-            const descriptor = await getFaceDescriptorFromVideo(attendanceVideo);
-            
-            if(!descriptor) {
-                updateStatus(attendanceStatusDiv, "😞 No face detected. Try better lighting or switch camera", "error");
+            const descriptor = await getFaceDescriptor(attendanceVideo);
+            if (!descriptor) {
+                updateStatus(attendanceStatusDiv, "😞 No face detected. Try better lighting!", "error");
                 isProcessing = false;
                 captureAttendanceBtn.disabled = false;
                 return;
             }
             
-            updateStatus(attendanceStatusDiv, "🧠 Matching face...", "info");
+            updateStatus(attendanceStatusDiv, "🧠 Matching...", "info");
             const match = findBestMatch(descriptor, 0.6);
             
-            if(!match) {
-                updateStatus(attendanceStatusDiv, "❌ Face not registered. Please register first", "error");
+            if (!match) {
+                updateStatus(attendanceStatusDiv, "❌ Face not registered. Please register first.", "error");
                 isProcessing = false;
                 captureAttendanceBtn.disabled = false;
                 return;
             }
             
             updateStatus(attendanceStatusDiv, `✅ Recognized: ${match.name}`, "success");
-            
             const result = await markAttendanceInSheet(match.name);
             const todayStr = getLocalDate();
             
-            if(result?.success) {
-                attendanceResultDiv.innerHTML += `
-                    <div class="attendance-item">
-                        <span>⛪ ${match.name}</span>
-                        <span class="badge">${todayStr}</span>
-                    </div>
-                `;
+            if (result?.success) {
+                attendanceResultDiv.innerHTML += `<div class="attendance-item"><span>⛪ ${match.name}</span><span class="badge">${todayStr}</span></div>`;
                 attendanceResultDiv.scrollTop = attendanceResultDiv.scrollHeight;
-                updateDebug(attendanceDebugDiv, `✅ Attendance marked for ${match.name}`);
+                updateDebug(attendanceDebugDiv, `Attendance marked for ${match.name}`);
             }
-            
-        } catch(error) {
-            updateStatus(attendanceStatusDiv, `❌ Error: ${error.message}`, "error");
+        } catch (error) {
+            updateStatus(attendanceStatusDiv, `Error: ${error.message}`, "error");
         } finally {
             isProcessing = false;
             captureAttendanceBtn.disabled = false;
         }
     }
     
-    // ==================== REGISTRATION ACTION ====================
     async function registerFace() {
-        console.log("REGISTER CLICKED");
-        
-        if(isProcessing) return;
+        console.log("REGISTER FACE");
+        if (isProcessing) return;
         
         const name = newUserNameInput.value.trim();
-        if(!name) {
-            updateStatus(registerStatusDiv, "⚠️ Please enter full name", "error");
+        if (!name) {
+            updateStatus(registerStatusDiv, "⚠️ Please enter name", "error");
             return;
         }
         
-        updateDebug(registerDebugDiv, `🚀 Starting face registration for: ${name}`);
-        
-        if(!modelsLoaded) {
-            await loadModels();
-            if(!modelsLoaded) return;
-        }
-        
-        if(!registerVideo.videoWidth) {
-            updateStatus(registerStatusDiv, "📷 Starting camera...", "info");
-            await startCameraForRegister(currentRegisterCamera);
+        if (!modelsLoaded) { await loadModels(); if (!modelsLoaded) return; }
+        if (!registerVideo.videoWidth) {
+            await startRegisterCamera();
             setTimeout(() => registerFace(), 1500);
             return;
         }
         
         isProcessing = true;
         captureRegisterBtn.disabled = true;
-        updateStatus(registerStatusDiv, "📸 Capturing face... (wait 2-3 seconds)", "info");
+        updateStatus(registerStatusDiv, "📸 Capturing face...", "info");
         
         try {
-            await new Promise(r => setTimeout(r, 500));
-            const descriptor = await getFaceDescriptorFromVideo(registerVideo);
-            
-            if(!descriptor) {
-                updateStatus(registerStatusDiv, "😞 No face detected. Try better lighting or switch camera", "error");
-                updateDebug(registerDebugDiv, "❌ No face detected", true);
+            const descriptor = await getFaceDescriptor(registerVideo);
+            if (!descriptor) {
+                updateStatus(registerStatusDiv, "😞 No face detected. Try better lighting!", "error");
                 isProcessing = false;
                 captureRegisterBtn.disabled = false;
                 return;
             }
             
-            updateDebug(registerDebugDiv, "✅ Face detected, saving...");
-            updateStatus(registerStatusDiv, "💾 Saving face...", "info");
-            
+            updateStatus(registerStatusDiv, "💾 Saving...", "info");
             const result = await saveFaceToSheet(name, descriptor);
             
-            if(result?.success) {
-                updateStatus(registerStatusDiv, `✅ Face registered for ${name}!`, "success");
-                updateDebug(registerDebugDiv, `✅ Successfully registered ${name}`);
+            if (result?.success) {
+                updateStatus(registerStatusDiv, `✅ Registered ${name}!`, "success");
+                updateDebug(registerDebugDiv, `Successfully registered ${name}`);
                 newUserNameInput.value = '';
                 
                 const newDesc = { name, descriptor: new Float32Array(descriptor) };
                 const idx = faceDescriptorsDB.findIndex(f => f.name === name);
-                if(idx !== -1) faceDescriptorsDB[idx] = newDesc;
+                if (idx !== -1) faceDescriptorsDB[idx] = newDesc;
                 else faceDescriptorsDB.push(newDesc);
+                updateDebug(registerDebugDiv, `Total faces: ${faceDescriptorsDB.length}`);
             } else {
-                updateStatus(registerStatusDiv, `❌ Failed to save face`, "error");
+                updateStatus(registerStatusDiv, `❌ Failed: ${result?.error || 'Unknown'}`, "error");
             }
-            
-        } catch(error) {
-            updateStatus(registerStatusDiv, `❌ Error: ${error.message}`, "error");
+        } catch (error) {
+            updateStatus(registerStatusDiv, `Error: ${error.message}`, "error");
         } finally {
             isProcessing = false;
             captureRegisterBtn.disabled = false;
         }
     }
     
-    // ==================== MODE SWITCHING ====================
-    async function setMode(mode) {
-        if(mode === "attendance") {
+    function setMode(mode) {
+        if (mode === "attendance") {
             attendancePanelDiv.classList.add("active-panel");
             registerPanelDiv.classList.remove("active-panel");
             takeAttendanceBtn.classList.add("active");
             registerFaceBtn.classList.remove("active");
-            
-            if(registerStream) {
-                registerStream.getTracks().forEach(t => t.stop());
-                registerStream = null;
-            }
-            await startCameraForAttendance(currentAttendanceCamera);
+            if (registerStream) { registerStream.getTracks().forEach(t => t.stop()); registerStream = null; }
+            startAttendanceCamera();
         } else {
             attendancePanelDiv.classList.remove("active-panel");
             registerPanelDiv.classList.add("active-panel");
             registerFaceBtn.classList.add("active");
             takeAttendanceBtn.classList.remove("active");
-            
-            if(attendanceStream) {
-                attendanceStream.getTracks().forEach(t => t.stop());
-                attendanceStream = null;
-            }
-            await startCameraForRegister(currentRegisterCamera);
+            if (attendanceStream) { attendanceStream.getTracks().forEach(t => t.stop()); attendanceStream = null; }
+            startRegisterCamera();
         }
     }
     
-    // ==================== INITIALIZATION ====================
+    // ==================== INIT ====================
     async function init() {
         attendanceVideo = document.getElementById('attendanceVideo');
         attendanceCanvas = document.getElementById('attendanceCanvas');
@@ -812,7 +692,7 @@
         
         function setupCanvas() {
             const wrapper = document.querySelector('.video-wrapper');
-            if(wrapper) {
+            if (wrapper) {
                 const rect = wrapper.getBoundingClientRect();
                 attendanceCanvas.width = rect.width;
                 attendanceCanvas.height = rect.height;
@@ -823,35 +703,30 @@
         setTimeout(setupCanvas, 100);
         window.addEventListener('resize', setupCanvas);
         
-        // Camera button listeners
-        attendanceFrontCam.addEventListener('click', () => switchAttendanceCamera('user'));
-        attendanceBackCam.addEventListener('click', () => switchAttendanceCamera('environment'));
-        registerFrontCam.addEventListener('click', () => switchRegisterCamera('user'));
-        registerBackCam.addEventListener('click', () => switchRegisterCamera('environment'));
+        attendanceFrontCam.onclick = () => switchAttendanceCamera('user');
+        attendanceBackCam.onclick = () => switchAttendanceCamera('environment');
+        registerFrontCam.onclick = () => switchRegisterCamera('user');
+        registerBackCam.onclick = () => switchRegisterCamera('environment');
         
-        updateDebug(attendanceDebugDiv, "🚀 Starting app...");
-        updateDebug(attendanceDebugDiv, "📁 Looking for models in './models' folder");
+        captureAttendanceBtn.onclick = takeAttendance;
+        captureRegisterBtn.onclick = registerFace;
+        takeAttendanceBtn.onclick = () => setMode("attendance");
+        registerFaceBtn.onclick = () => setMode("register");
         
+        updateDebug(attendanceDebugDiv, "Starting app...");
         await loadMembers();
         await loadFaceDescriptors();
         await loadModels();
-        await startCameraForAttendance('user');
-        
-        captureAttendanceBtn.addEventListener('click', takeAttendance);
-        captureRegisterBtn.addEventListener('click', registerFace);
-        takeAttendanceBtn.addEventListener('click', () => setMode("attendance"));
-        registerFaceBtn.addEventListener('click', () => setMode("register"));
-        
+        await startAttendanceCamera();
         updateDebug(attendanceDebugDiv, "✅ App ready! Look at camera for green rectangle");
     }
     
-    window.addEventListener('beforeunload', () => {
-        if(animationFrameId) cancelAnimationFrame(animationFrameId);
-        if(attendanceStream) attendanceStream.getTracks().forEach(t => t.stop());
-        if(registerStream) registerStream.getTracks().forEach(t => t.stop());
-    });
-    
-    window.addEventListener('load', init);
+    window.onload = init;
+    window.onbeforeunload = () => {
+        if (animationFrameId) cancelAnimationFrame(animationFrameId);
+        if (attendanceStream) attendanceStream.getTracks().forEach(t => t.stop());
+        if (registerStream) registerStream.getTracks().forEach(t => t.stop());
+    };
 </script>
 </body>
 </html>
