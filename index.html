@@ -171,7 +171,7 @@
             background: #f8f9fa;
             padding: 0.5rem;
             border-radius: 0.5rem;
-            max-height: 120px;
+            max-height: 150px;
             overflow-y: auto;
             font-family: monospace;
         }
@@ -196,17 +196,6 @@
             border-radius: 12px;
             font-size: 10px;
             z-index: 10;
-        }
-        .sync-btn {
-            background: #28a745;
-            color: white;
-            border: none;
-            padding: 0.5rem;
-            border-radius: 2rem;
-            font-size: 0.8rem;
-            cursor: pointer;
-            margin-top: 0.5rem;
-            width: 100%;
         }
     </style>
 </head>
@@ -233,11 +222,10 @@
             <button id="attendanceBackCam" class="cam-btn">📱 Back</button>
         </div>
         
-        <!-- Date Selector -->
         <div class="date-selector">
             <label>📅 Select Date for Attendance</label>
             <select id="attendanceDateSelect">
-                <option value="">Loading dates...</option>
+                <option value="">-- Select Date --</option>
             </select>
         </div>
         
@@ -273,12 +261,11 @@
 
 <script>
     // ==================== CONFIGURATION ====================
-    // Google Sheets published JSON URL for reading members and dates
     const SHEET_ID = '1VYIPqwlbTAA8_NvXT6pUMxIcT8f6Jq2hoayGt1UMNr0';
     const SHEET_GID = '0';
     const GOOGLE_SHEETS_JSON_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${SHEET_GID}`;
     
-    // Apps Script URL for marking attendance (POST)
+    // Apps Script URL - REPLACE WITH YOUR DEPLOYED URL
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/YOUR_APPS_SCRIPT_URL/exec";
     
     const MODEL_URL = './models';
@@ -289,7 +276,7 @@
     let attendanceStream = null, registerStream = null;
     let membersList = [];
     let faceDescriptorsDB = [];
-    let dateHeaders = []; // Store date columns from Sheet1
+    let dateHeaders = [];
     let isProcessing = false;
     let currentAttendanceCamera = 'user';
     let currentRegisterCamera = 'user';
@@ -318,16 +305,15 @@
     const registerBackCam = document.getElementById('registerBackCam');
     const attendanceDateSelect = document.getElementById('attendanceDateSelect');
     
-    function getLocalDate() {
-        const d = new Date();
-        d.setHours(d.getHours() + 2);
-        return d.toISOString().slice(0, 10);
-    }
-    
-    function formatDate(dateObj) {
-        if (!dateObj) return '';
-        const d = new Date(dateObj);
-        return d.toLocaleDateString('en-CA'); // YYYY-MM-DD
+    function formatDate(dateValue) {
+        if (!dateValue) return '';
+        try {
+            const d = new Date(dateValue);
+            if (isNaN(d.getTime())) return '';
+            return d.toISOString().split('T')[0];
+        } catch(e) {
+            return '';
+        }
     }
     
     function updateStatus(element, message, type = 'info') {
@@ -359,19 +345,35 @@
             const data = JSON.parse(jsonStr);
             
             const rows = data.table.rows;
-            const headers = data.table.cols.map(col => col.label);
             
-            // Extract date headers (skip first column which is "الأسم")
+            // Get the first row (header row) which contains dates
+            const headerRow = rows[0];
+            if (!headerRow) {
+                throw new Error('No header row found');
+            }
+            
+            // Parse dates from header row (skip first column which is "الأسم")
             dateHeaders = [];
-            for (let i = 1; i < headers.length; i++) {
-                const header = headers[i];
-                // Check if it's a date (has a date-like value)
-                if (rows[0] && rows[0].c[i] && rows[0].c[i].v) {
-                    const dateValue = rows[0].c[i].v;
-                    if (dateValue instanceof Date || (typeof dateValue === 'string' && dateValue.includes('-'))) {
+            for (let i = 1; i < headerRow.c.length; i++) {
+                const cell = headerRow.c[i];
+                if (cell && cell.v) {
+                    let dateValue = null;
+                    
+                    // Check if it's a date object or string
+                    if (cell.v instanceof Date) {
+                        dateValue = cell.v;
+                    } else if (typeof cell.v === 'string') {
+                        // Try to parse date string
+                        const parsed = new Date(cell.v);
+                        if (!isNaN(parsed.getTime())) {
+                            dateValue = parsed;
+                        }
+                    }
+                    
+                    if (dateValue && !isNaN(dateValue.getTime())) {
                         dateHeaders.push({
                             column: i + 1, // 1-indexed column for API
-                            date: new Date(dateValue),
+                            date: dateValue,
                             dateStr: formatDate(dateValue)
                         });
                     }
@@ -387,20 +389,30 @@
                 attendanceDateSelect.appendChild(option);
             });
             
-            // Load members (skip header row)
+            updateDebug(attendanceDebugDiv, `📅 Found ${dateHeaders.length} dates`);
+            if (dateHeaders.length > 0) {
+                updateDebug(attendanceDebugDiv, `Dates: ${dateHeaders.map(d => d.dateStr).join(', ')}`);
+            } else {
+                updateDebug(attendanceDebugDiv, `⚠️ No dates found. Check your sheet header row.`, true);
+            }
+            
+            // Load members from rows (skip header row)
             const members = [];
             for (let i = 1; i < rows.length; i++) {
-                const nameCell = rows[i].c[0];
-                if (nameCell && nameCell.v && nameCell.v.toString().trim() !== '') {
-                    members.push({
-                        name: nameCell.v.toString().trim(),
-                        rowIndex: i + 1 // 1-indexed row for API
-                    });
+                const row = rows[i];
+                if (row && row.c && row.c[0] && row.c[0].v) {
+                    const name = row.c[0].v.toString().trim();
+                    if (name && name !== '') {
+                        members.push({
+                            name: name,
+                            rowIndex: i + 1 // 1-indexed row for API
+                        });
+                    }
                 }
             }
             
             membersList = members;
-            updateDebug(attendanceDebugDiv, `✅ Loaded ${membersList.length} members and ${dateHeaders.length} dates`);
+            updateDebug(attendanceDebugDiv, `✅ Loaded ${membersList.length} members`);
             return true;
         } catch (err) {
             updateDebug(attendanceDebugDiv, `❌ Error loading data: ${err.message}`, true);
@@ -408,7 +420,7 @@
         }
     }
     
-    // ==================== MARK ATTENDANCE IN SHEET1 VIA APPS SCRIPT ====================
+    // ==================== MARK ATTENDANCE VIA APPS SCRIPT ====================
     async function markAttendanceInSheet(name, rowIndex, columnIndex) {
         try {
             updateDebug(attendanceDebugDiv, `📤 Marking attendance for ${name} at row ${rowIndex}, column ${columnIndex}...`);
@@ -428,20 +440,7 @@
             return result;
         } catch (err) {
             updateDebug(attendanceDebugDiv, `❌ Error: ${err.message}`, true);
-            
-            // Fallback to localStorage
-            const todayStr = getLocalDate();
-            const stored = localStorage.getItem('attendance_log') || '[]';
-            const log = JSON.parse(stored);
-            const alreadyMarked = log.some(entry => entry.name === name && entry.date === todayStr);
-            
-            if (!alreadyMarked) {
-                log.push({ name, date: todayStr, column: columnIndex, timestamp: new Date().toISOString() });
-                localStorage.setItem('attendance_log', JSON.stringify(log));
-                updateDebug(attendanceDebugDiv, `⚠️ Attendance saved locally only`);
-                return { success: true, alreadyMarked: false, localOnly: true };
-            }
-            return { success: true, alreadyMarked: true };
+            return { success: false, error: err.message };
         }
     }
     
@@ -543,7 +542,7 @@
         }, 150);
     }
     
-    // ==================== FACE DESCRIPTORS (Local Storage) ====================
+    // ==================== FACE DESCRIPTORS ====================
     async function loadFaceDescriptors() {
         const stored = localStorage.getItem('face_descriptors');
         if (stored) {
@@ -675,11 +674,11 @@
         startRegisterCamera();
     }
     
-    // ==================== DISPLAY ATTENDANCE FOR SELECTED DATE ====================
-    function displayAttendanceForDate(selectedDate) {
+    // ==================== DISPLAY ATTENDANCE ====================
+    function displayAttendanceForDate(selectedDateStr) {
         const stored = localStorage.getItem('attendance_log') || '[]';
         const log = JSON.parse(stored);
-        const todayAttendance = log.filter(entry => entry.date === selectedDate);
+        const todayAttendance = log.filter(entry => entry.date === selectedDateStr);
         
         attendanceResultDiv.innerHTML = '';
         if (todayAttendance.length === 0) {
@@ -735,7 +734,6 @@
                 return;
             }
             
-            // Find the person's row in membersList
             const person = membersList.find(m => m.name === match.name);
             if (!person) {
                 updateStatus(attendanceStatusDiv, `❌ ${match.name} not found in member list`, "error");
@@ -746,7 +744,6 @@
             
             updateStatus(attendanceStatusDiv, `✅ Recognized: ${match.name}`, "success");
             
-            // Mark attendance at the specific row and column
             const result = await markAttendanceInSheet(match.name, person.rowIndex, parseInt(selectedColumn));
             
             if (result?.success) {
@@ -754,11 +751,11 @@
                     updateStatus(attendanceStatusDiv, `⚠️ ${match.name} already marked for ${selectedDateText}`, "warning");
                 } else {
                     updateStatus(attendanceStatusDiv, `✅ ${match.name} marked present for ${selectedDateText}`, "success");
+                    displayAttendanceForDate(selectedDateText);
                 }
-                displayAttendanceForDate(selectedDateText);
-                updateDebug(attendanceDebugDiv, `✓ Attendance marked for ${match.name} at column ${selectedColumn}`);
+                updateDebug(attendanceDebugDiv, `✓ Attendance marked for ${match.name}`);
             } else {
-                updateStatus(attendanceStatusDiv, `⚠️ Could not mark attendance`, "error");
+                updateStatus(attendanceStatusDiv, `⚠️ Could not mark attendance: ${result?.error}`, "error");
             }
         } catch (error) {
             updateStatus(attendanceStatusDiv, `Error: ${error.message}`, "error");
@@ -871,10 +868,9 @@
         takeAttendanceBtn.onclick = () => setMode("attendance");
         registerFaceBtn.onclick = () => setMode("register");
         
-        // Update display when date changes
         attendanceDateSelect.onchange = () => {
             const selectedDateText = attendanceDateSelect.options[attendanceDateSelect.selectedIndex]?.text;
-            if (selectedDateText) {
+            if (selectedDateText && selectedDateText !== '-- Select Date --') {
                 displayAttendanceForDate(selectedDateText);
             }
         };
@@ -897,7 +893,7 @@
         await startAttendanceCamera();
         
         updateDebug(attendanceDebugDiv, "✅ System Ready! Select a date, then look at camera");
-        updateDebug(attendanceDebugDiv, "📌 Face data saved locally. Export feature coming soon.");
+        updateDebug(attendanceDebugDiv, "📌 Face data saved locally");
     }
     
     window.onload = init;
