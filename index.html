@@ -76,6 +76,7 @@
             aspect-ratio: 4/3;
             margin-bottom: 1rem;
             position: relative;
+            cursor: pointer;
         }
         video {
             width: 100%;
@@ -127,6 +128,10 @@
         .status.warning {
             background: #fff3cd;
             color: #856404;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
         }
         .input-group {
             margin-bottom: 1rem;
@@ -199,9 +204,20 @@
             background: #f8f9fa;
             padding: 0.5rem;
             border-radius: 0.5rem;
-            max-height: 100px;
+            max-height: 120px;
             overflow-y: auto;
             font-family: monospace;
+        }
+        .face-indicator {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 20px;
+            font-size: 11px;
+            z-index: 10;
         }
     </style>
 </head>
@@ -221,6 +237,7 @@
         <div class="video-wrapper">
             <video id="attendanceVideo" autoplay muted playsinline></video>
             <canvas id="attendanceCanvas"></canvas>
+            <div id="attendanceFaceIndicator" class="face-indicator">🔍 انتظار الوجه...</div>
         </div>
         <button id="captureAttendance" class="btn-capture">🔍 تعرف على الوجه وسجل الحضور</button>
         <div id="attendanceStatus" class="status">⏳ جاري تحميل النماذج...</div>
@@ -236,6 +253,7 @@
         <div class="video-wrapper">
             <video id="registerVideo" autoplay muted playsinline></video>
             <canvas id="registerCanvas"></canvas>
+            <div id="registerFaceIndicator" class="face-indicator">🔍 انتظار الوجه...</div>
         </div>
         <div class="input-group">
             <label>👤 الاسم بالكامل (كما هو في شيت الأسماء)</label>
@@ -247,17 +265,14 @@
         <div id="registerDebug" class="debug-info"></div>
     </div>
     <div class="footer">
-        🔗 متصل بـ Google Sheets | نظام التعرف على الوجه باستخدام FaceAPI
+        🔗 متصل بـ Google Sheets | انتظر 2-3 ثواني حتى يظهر الإطار الأخضر حول الوجه
     </div>
 </div>
 
 <script>
     // ==================== CONFIGURATION ====================
-    // استبدل هذا الرابط برابط التطبيق الخاص بك من Google Apps Script
     const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbMd7ZvHyMVS_yUK6ANUEn4TYhLNe9o4hHz26q3Fp2a1yMhq6FlWSmgzvhBa4-MS2nug/exec";
-    
-    // ✅ CORRECT MODEL URL - using official face-api.js CDN
-    const MODEL_URL = './models';
+    const MODEL_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/models';
     
     // ==================== GLOBALS ====================
     let modelsLoaded = false;
@@ -266,6 +281,7 @@
     let membersList = [];
     let faceDescriptorsDB = [];
     let isProcessing = false;
+    let animationFrameId = null;
     
     // UI Elements
     const takeAttendanceBtn = document.getElementById('takeAttendanceBtn');
@@ -282,22 +298,19 @@
     const newUserNameInput = document.getElementById('newUserName');
     const attendanceProgress = document.getElementById('attendanceProgress');
     const registerProgress = document.getElementById('registerProgress');
+    const attendanceFaceIndicator = document.getElementById('attendanceFaceIndicator');
+    const registerFaceIndicator = document.getElementById('registerFaceIndicator');
     
-    // Helper: Get local date (Egypt timezone)
+    // Helper: Get local date
     function getLocalDate() {
         const d = new Date();
-        const offset = 2; // Egypt UTC+2
-        d.setHours(d.getHours() + offset);
+        d.setHours(d.getHours() + 2);
         return d.toISOString().slice(0, 10);
     }
     
-    // Helper: Update status with styling
     function updateStatus(element, message, type = 'info') {
         element.textContent = message;
-        element.className = 'status';
-        if (type === 'error') element.classList.add('error');
-        if (type === 'success') element.classList.add('success');
-        if (type === 'warning') element.classList.add('warning');
+        element.className = 'status ' + type;
     }
     
     function updateDebug(element, message, isError = false) {
@@ -305,9 +318,7 @@
         const prefix = isError ? '❌' : 'ℹ️';
         element.innerHTML = `${prefix} [${timestamp}] ${message}<br>` + element.innerHTML;
         const lines = element.innerHTML.split('<br>');
-        if (lines.length > 20) {
-            element.innerHTML = lines.slice(0, 20).join('<br>');
-        }
+        if (lines.length > 20) element.innerHTML = lines.slice(0, 20).join('<br>');
         console.log(message);
     }
     
@@ -323,18 +334,15 @@
                 method: 'GET',
                 mode: 'cors'
             });
-            const data = await response.json();
-            return data;
+            return await response.json();
         } catch (err) {
-            console.error("Fetch error:", err);
-            updateDebug(attendanceDebugDiv, `خطأ في الاتصال: ${err.message}`, true);
+            updateDebug(attendanceDebugDiv, `خطأ: ${err.message}`, true);
             return { success: false, error: err.message };
         }
     }
     
     async function saveFaceToSheet(name, descriptorArray) {
         try {
-            updateDebug(registerDebugDiv, `📤 جاري إرسال الوجه إلى Google Sheets...`);
             const response = await fetch(GOOGLE_SCRIPT_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -344,33 +352,26 @@
                     descriptor: Array.from(descriptorArray)
                 })
             });
-            
-            const data = await response.json();
-            updateDebug(registerDebugDiv, `📥 استجابة: ${JSON.stringify(data)}`);
-            return data;
+            return await response.json();
         } catch (err) {
-            console.error("Save face error:", err);
-            updateDebug(registerDebugDiv, `خطأ في حفظ الوجه: ${err.message}`, true);
+            updateDebug(registerDebugDiv, `خطأ: ${err.message}`, true);
             return { success: false, error: err.message };
         }
     }
     
     async function loadMembers() {
-        updateDebug(attendanceDebugDiv, `📥 جاري تحميل قائمة الأعضاء...`);
         const res = await fetchFromSheets("getMembers");
-        if(res && res.success && res.members) {
+        if(res?.success && res.members) {
             membersList = res.members;
             updateDebug(attendanceDebugDiv, `✅ تم تحميل ${membersList.length} عضو`);
             return true;
         }
-        updateDebug(attendanceDebugDiv, `⚠️ فشل تحميل الأعضاء: ${res?.error || 'غير معروف'}`, true);
         return false;
     }
     
     async function loadFaceDescriptors() {
-        updateDebug(attendanceDebugDiv, `📥 جاري تحميل بصمات الوجه...`);
         const res = await fetchFromSheets("getFaceData");
-        if(res && res.success && res.faces) {
+        if(res?.success && res.faces) {
             faceDescriptorsDB = res.faces.map(f => ({
                 name: f.name,
                 descriptor: new Float32Array(f.descriptor)
@@ -382,106 +383,102 @@
     }
     
     async function markAttendanceInSheet(name) {
-        const dateStr = getLocalDate();
-        const res = await fetchFromSheets("markAttendance", { name, date: dateStr });
-        return res;
+        return await fetchFromSheets("markAttendance", { name, date: getLocalDate() });
     }
     
     // ==================== FACE RECOGNITION ====================
     async function loadModels() {
         if(modelsLoaded) return true;
         
-        updateStatus(attendanceStatusDiv, "📥 جاري تحميل نماذج الذكاء الاصطناعي...", "info");
-        updateStatus(registerStatusDiv, "📥 جاري تحميل نماذج الذكاء الاصطناعي...", "info");
-        updateProgress(attendanceProgress, 10);
-        updateProgress(registerProgress, 10);
+        updateStatus(attendanceStatusDiv, "📥 جاري تحميل النماذج...", "info");
+        updateProgress(attendanceProgress, 20);
         
         try {
-            updateDebug(attendanceDebugDiv, `🔄 تحميل النماذج من: ${MODEL_URL}`);
-            
-            // Load all required models with progress
-            updateDebug(attendanceDebugDiv, "📦 جاري تحميل SSD MobileNet...");
             await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-            updateProgress(attendanceProgress, 40);
-            updateProgress(registerProgress, 40);
-            updateDebug(attendanceDebugDiv, "✅ تم تحميل SSD MobileNet");
-            
-            updateDebug(attendanceDebugDiv, "📦 جاري تحميل Face Landmark...");
+            updateProgress(attendanceProgress, 50);
             await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-            updateProgress(attendanceProgress, 70);
-            updateProgress(registerProgress, 70);
-            updateDebug(attendanceDebugDiv, "✅ تم تحميل Face Landmark");
-            
-            updateDebug(attendanceDebugDiv, "📦 جاري تحميل Face Recognition...");
+            updateProgress(attendanceProgress, 75);
             await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-            updateProgress(attendanceProgress, 90);
-            updateProgress(registerProgress, 90);
-            updateDebug(attendanceDebugDiv, "✅ تم تحميل Face Recognition");
-            
-            // Optional: Load tiny face detector for faster detection
-            try {
-                await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-                updateDebug(attendanceDebugDiv, "✅ تم تحميل Tiny Face Detector");
-            } catch(e) {
-                updateDebug(attendanceDebugDiv, "⚠️ Tiny Face Detector غير متاح، سيتم استخدام الافتراضي");
-            }
+            updateProgress(attendanceProgress, 100);
             
             modelsLoaded = true;
-            updateProgress(attendanceProgress, 100);
-            updateProgress(registerProgress, 100);
-            updateStatus(attendanceStatusDiv, "✅ النماذج جاهزة! اضغط للتعرف", "success");
-            updateStatus(registerStatusDiv, "✅ النماذج جاهزة! يمكنك تسجيل الوجه", "success");
+            updateStatus(attendanceStatusDiv, "✅ النماذج جاهزة!", "success");
+            updateStatus(registerStatusDiv, "✅ النماذج جاهزة!", "success");
             
-            setTimeout(() => {
-                updateProgress(attendanceProgress, 0);
-                updateProgress(registerProgress, 0);
-            }, 1000);
-            
+            setTimeout(() => updateProgress(attendanceProgress, 0), 1000);
             return true;
         } catch(e) {
-            console.error("Model load error:", e);
-            updateDebug(attendanceDebugDiv, `❌ خطأ في تحميل النماذج: ${e.message}`, true);
-            updateStatus(attendanceStatusDiv, `❌ فشل تحميل النماذج. تأكد من الاتصال بالإنترنت`, "error");
-            updateStatus(registerStatusDiv, `❌ فشل تحميل النماذج. تأكد من الاتصال بالإنترنت`, "error");
+            updateStatus(attendanceStatusDiv, `❌ خطأ: ${e.message}`, "error");
             return false;
         }
     }
     
+    // Continuous face detection and drawing
+    async function startFaceDetection(video, canvas, indicator) {
+        if (!modelsLoaded) return;
+        
+        const detectAndDraw = async () => {
+            if (!video.videoWidth || !video.videoHeight) {
+                animationFrameId = requestAnimationFrame(detectAndDraw);
+                return;
+            }
+            
+            try {
+                const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks();
+                
+                const displaySize = { width: video.videoWidth, height: video.videoHeight };
+                faceapi.matchDimensions(canvas, displaySize);
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                if (detection) {
+                    // Draw green rectangle around face
+                    const resizedDetection = faceapi.resizeResults(detection, displaySize);
+                    faceapi.draw.drawDetections(canvas, [resizedDetection]);
+                    
+                    // Update indicator
+                    if (indicator) {
+                        indicator.innerHTML = '✅ وجه مكتشف!';
+                        indicator.style.background = 'rgba(46, 125, 50, 0.9)';
+                    }
+                } else {
+                    if (indicator) {
+                        indicator.innerHTML = '🔍 لم يتم اكتشاف وجه';
+                        indicator.style.background = 'rgba(0,0,0,0.7)';
+                    }
+                }
+            } catch(e) {
+                // Silent fail
+            }
+            
+            animationFrameId = requestAnimationFrame(detectAndDraw);
+        };
+        
+        detectAndDraw();
+    }
+    
     async function getFaceDescriptorFromVideo(videoElement) {
         if(!videoElement.videoWidth || !videoElement.videoHeight) {
-            updateDebug(attendanceDebugDiv, "⏳ الكاميرا غير جاهزة بعد (width: 0)");
             return null;
         }
         
-        updateDebug(attendanceDebugDiv, "🔍 جاري البحث عن وجه...");
-        
-        let detection;
-        try {
-            // Try with tiny face detector first (faster)
-            detection = await faceapi.detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions())
+        // Try multiple times to get a good face
+        for (let attempt = 0; attempt < 3; attempt++) {
+            const detection = await faceapi.detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions())
                 .withFaceLandmarks()
                 .withFaceDescriptor();
-        } catch(e) {
-            // Fallback to SSD MobileNet
-            detection = await faceapi.detectSingleFace(videoElement)
-                .withFaceLandmarks()
-                .withFaceDescriptor();
+            
+            if (detection) {
+                return detection.descriptor;
+            }
+            await new Promise(r => setTimeout(r, 200));
         }
-        
-        if(!detection) {
-            updateDebug(attendanceDebugDiv, "❌ لم يتم اكتشاف وجه - تأكد من الإضاءة والنظر للكاميرا");
-            return null;
-        }
-        
-        updateDebug(attendanceDebugDiv, `✅ تم اكتشاف وجه بنجاح!`);
-        return detection.descriptor;
+        return null;
     }
     
     function findBestMatch(descriptor, threshold = 0.6) {
-        if(faceDescriptorsDB.length === 0) {
-            updateDebug(attendanceDebugDiv, "📭 لا يوجد وجوه مسجلة في قاعدة البيانات");
-            return null;
-        }
+        if(faceDescriptorsDB.length === 0) return null;
         
         let bestMatch = null;
         let bestDistance = Infinity;
@@ -494,52 +491,48 @@
             }
         }
         
-        updateDebug(attendanceDebugDiv, `📊 أفضل تطابق: ${bestMatch?.name} (المسافة: ${bestDistance.toFixed(3)})`);
+        updateDebug(attendanceDebugDiv, `أفضل تطابق: ${bestMatch?.name} (المسافة: ${bestDistance.toFixed(3)})`);
         
-        if(bestDistance <= threshold) {
-            return bestMatch;
-        }
-        updateDebug(attendanceDebugDiv, `⚠️ المسافة ${bestDistance.toFixed(3)} > العتبة ${threshold}`);
-        return null;
+        return bestDistance <= threshold ? bestMatch : null;
     }
     
     // ==================== CAMERA SETUP ====================
     async function startCameraForAttendance() {
-        if(attendanceStream) {
-            attendanceStream.getTracks().forEach(t => t.stop());
-        }
+        if(attendanceStream) attendanceStream.getTracks().forEach(t => t.stop());
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } 
+                video: { facingMode: "user", width: 640, height: 480 } 
             });
             attendanceStream = stream;
             attendanceVideo.srcObject = stream;
             await attendanceVideo.play();
-            updateDebug(attendanceDebugDiv, "📷 تم تشغيل الكاميرا بنجاح");
+            updateDebug(attendanceDebugDiv, "📷 الكاميرا تعمل");
+            
+            // Start live detection
+            startFaceDetection(attendanceVideo, attendanceCanvas, attendanceFaceIndicator);
             return true;
         } catch(err) {
             updateStatus(attendanceStatusDiv, "❌ لا يمكن الوصول للكاميرا", "error");
-            updateDebug(attendanceDebugDiv, `خطأ في الكاميرا: ${err.message}`, true);
             return false;
         }
     }
     
     async function startCameraForRegister() {
-        if(registerStream) {
-            registerStream.getTracks().forEach(t => t.stop());
-        }
+        if(registerStream) registerStream.getTracks().forEach(t => t.stop());
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } 
+                video: { facingMode: "user", width: 640, height: 480 } 
             });
             registerStream = stream;
             registerVideo.srcObject = stream;
             await registerVideo.play();
-            updateDebug(registerDebugDiv, "📷 تم تشغيل الكاميرا بنجاح");
+            updateDebug(registerDebugDiv, "📷 الكاميرا تعمل");
+            
+            // Start live detection
+            startFaceDetection(registerVideo, registerCanvas, registerFaceIndicator);
             return true;
         } catch(err) {
             updateStatus(registerStatusDiv, "❌ لا يمكن الوصول للكاميرا", "error");
-            updateDebug(registerDebugDiv, `خطأ في الكاميرا: ${err.message}`, true);
             return false;
         }
     }
@@ -549,12 +542,11 @@
         console.log("TAKE ATTENDANCE CLICKED");
         
         if(isProcessing) {
-            updateStatus(attendanceStatusDiv, "⏳ جاري المعالجة... انتظر قليلاً", "warning");
+            updateStatus(attendanceStatusDiv, "⏳ انتظر...", "warning");
             return;
         }
         
         if(!modelsLoaded) {
-            updateStatus(attendanceStatusDiv, "⏳ جاري تحميل النماذج...", "info");
             await loadModels();
             if(!modelsLoaded) return;
         }
@@ -562,27 +554,32 @@
         if(!attendanceVideo.videoWidth) {
             updateStatus(attendanceStatusDiv, "📷 جاري تشغيل الكاميرا...", "info");
             await startCameraForAttendance();
-            setTimeout(() => takeAttendance(), 1000);
+            setTimeout(() => takeAttendance(), 1500);
             return;
         }
         
         isProcessing = true;
         captureAttendanceBtn.disabled = true;
-        updateStatus(attendanceStatusDiv, "🔍 جاري اكتشاف الوجه...", "info");
+        updateStatus(attendanceStatusDiv, "🔍 جاري اكتشاف الوجه... (انتظر 2-3 ثواني)", "info");
         
         try {
-            await new Promise(r => setTimeout(r, 300));
+            updateDebug(attendanceDebugDiv, "🔍 بدء اكتشاف الوجه...");
+            
+            // Wait a bit for camera to stabilize
+            await new Promise(r => setTimeout(r, 500));
+            
             const descriptor = await getFaceDescriptorFromVideo(attendanceVideo);
             
             if(!descriptor) {
                 updateStatus(attendanceStatusDiv, "😞 لم يتم اكتشاف وجه. تأكد من الإضاءة وانظر للكاميرا", "error");
+                updateDebug(attendanceDebugDiv, "❌ لم يتم اكتشاف وجه بعد 3 محاولات", true);
                 isProcessing = false;
                 captureAttendanceBtn.disabled = false;
                 return;
             }
             
+            updateDebug(attendanceDebugDiv, "✅ تم اكتشاف الوجه، جاري المطابقة...");
             updateStatus(attendanceStatusDiv, "🧠 جاري مطابقة الوجه...", "info");
-            await new Promise(r => setTimeout(r, 300));
             
             const match = findBestMatch(descriptor, 0.6);
             
@@ -598,13 +595,7 @@
             const result = await markAttendanceInSheet(match.name);
             const todayStr = getLocalDate();
             
-            if(result && result.success) {
-                if(result.alreadyMarked) {
-                    updateStatus(attendanceStatusDiv, `⚠️ ${match.name} مسجل مسبقاً اليوم`, "warning");
-                } else {
-                    updateStatus(attendanceStatusDiv, `✅ تم تسجيل حضور ${match.name}`, "success");
-                }
-                
+            if(result?.success) {
                 attendanceResultDiv.innerHTML += `
                     <div class="attendance-item">
                         <span>⛪ ${match.name}</span>
@@ -612,12 +603,12 @@
                     </div>
                 `;
                 attendanceResultDiv.scrollTop = attendanceResultDiv.scrollHeight;
+                updateDebug(attendanceDebugDiv, `✅ تم تسجيل حضور ${match.name}`);
             } else {
-                updateStatus(attendanceStatusDiv, `⚠️ فشل تسجيل الحضور لـ ${match.name}`, "error");
+                updateStatus(attendanceStatusDiv, `⚠️ فشل تسجيل الحضور`, "error");
             }
             
         } catch(error) {
-            console.error("Attendance error:", error);
             updateStatus(attendanceStatusDiv, `❌ خطأ: ${error.message}`, "error");
             updateDebug(attendanceDebugDiv, `خطأ: ${error.message}`, true);
         } finally {
@@ -628,67 +619,56 @@
     
     // ==================== REGISTRATION ACTION ====================
     async function registerFace() {
-        console.log("REGISTER CLICKED - Starting registration process");
+        console.log("REGISTER CLICKED");
         
-        if(isProcessing) {
-            updateStatus(registerStatusDiv, "⏳ انتظر... جاري المعالجة", "warning");
-            return;
-        }
+        if(isProcessing) return;
         
         const name = newUserNameInput.value.trim();
         if(!name) {
-            updateStatus(registerStatusDiv, "⚠️ الرجاء إدخال الاسم بالكامل", "error");
-            updateDebug(registerDebugDiv, "❌ لم يتم إدخال الاسم", true);
+            updateStatus(registerStatusDiv, "⚠️ الرجاء إدخال الاسم", "error");
             return;
         }
         
         updateDebug(registerDebugDiv, `🚀 بدء تسجيل الوجه لـ: ${name}`);
         
         if(!modelsLoaded) {
-            updateStatus(registerStatusDiv, "⏳ جاري تحميل النماذج...", "info");
-            updateDebug(registerDebugDiv, "⏳ تحميل النماذج...");
             await loadModels();
-            if(!modelsLoaded) {
-                updateDebug(registerDebugDiv, "❌ فشل تحميل النماذج", true);
-                return;
-            }
+            if(!modelsLoaded) return;
         }
         
         if(!registerVideo.videoWidth) {
-            updateDebug(registerDebugDiv, `📷 الكاميرا غير جاهزة (width: ${registerVideo.videoWidth})`);
             updateStatus(registerStatusDiv, "📷 جاري تشغيل الكاميرا...", "info");
             await startCameraForRegister();
-            setTimeout(() => registerFace(), 1000);
+            setTimeout(() => registerFace(), 1500);
             return;
         }
         
-        updateDebug(registerDebugDiv, `📷 الكاميرا جاهزة (${registerVideo.videoWidth}x${registerVideo.videoHeight})`);
-        
         isProcessing = true;
         captureRegisterBtn.disabled = true;
-        updateStatus(registerStatusDiv, "📸 جاري التقاط الوجه...", "info");
+        updateStatus(registerStatusDiv, "📸 جاري التقاط الوجه... (انتظر 2-3 ثواني)", "info");
         
         try {
+            updateDebug(registerDebugDiv, "🔍 جاري اكتشاف الوجه...");
             await new Promise(r => setTimeout(r, 500));
+            
             const descriptor = await getFaceDescriptorFromVideo(registerVideo);
             
             if(!descriptor) {
                 updateStatus(registerStatusDiv, "😞 لم يتم اكتشاف وجه. حاول مرة أخرى", "error");
-                updateDebug(registerDebugDiv, "❌ لم يتم اكتشاف وجه في الصورة", true);
+                updateDebug(registerDebugDiv, "❌ لم يتم اكتشاف وجه", true);
                 isProcessing = false;
                 captureRegisterBtn.disabled = false;
                 return;
             }
             
-            updateDebug(registerDebugDiv, `✅ تم اكتشاف الوجه، جاري الحفظ...`);
+            updateDebug(registerDebugDiv, "✅ تم اكتشاف الوجه، جاري الحفظ...");
             updateStatus(registerStatusDiv, "💾 جاري حفظ الوجه...", "info");
             
             const result = await saveFaceToSheet(name, descriptor);
-            updateDebug(registerDebugDiv, `📥 نتيجة الحفظ: ${JSON.stringify(result)}`);
             
-            if(result && result.success) {
+            if(result?.success) {
                 updateStatus(registerStatusDiv, `✅ تم تسجيل الوجه لـ ${name} بنجاح!`, "success");
-                updateDebug(registerDebugDiv, `✅ تم تسجيل ${name} بنجاح في قاعدة البيانات`);
+                updateDebug(registerDebugDiv, `✅ تم تسجيل ${name}`);
                 newUserNameInput.value = '';
                 
                 // Update local database
@@ -696,17 +676,14 @@
                 const idx = faceDescriptorsDB.findIndex(f => f.name === name);
                 if(idx !== -1) faceDescriptorsDB[idx] = newDesc;
                 else faceDescriptorsDB.push(newDesc);
-                
-                updateDebug(registerDebugDiv, `📊 عدد الوجوه المسجلة الآن: ${faceDescriptorsDB.length}`);
             } else {
-                updateStatus(registerStatusDiv, `❌ فشل تسجيل الوجه: ${result?.error || 'خطأ غير معروف'}`, "error");
+                updateStatus(registerStatusDiv, `❌ فشل تسجيل الوجه`, "error");
                 updateDebug(registerDebugDiv, `❌ فشل الحفظ: ${result?.error}`, true);
             }
             
         } catch(error) {
-            console.error("Registration error:", error);
             updateStatus(registerStatusDiv, `❌ خطأ: ${error.message}`, "error");
-            updateDebug(registerDebugDiv, `❌ خطأ: ${error.message}`, true);
+            updateDebug(registerDebugDiv, `خطأ: ${error.message}`, true);
         } finally {
             isProcessing = false;
             captureRegisterBtn.disabled = false;
@@ -715,8 +692,6 @@
     
     // ==================== MODE SWITCHING ====================
     async function setMode(mode) {
-        console.log("Switching to mode:", mode);
-        
         if(mode === "attendance") {
             attendancePanelDiv.classList.add("active-panel");
             registerPanelDiv.classList.remove("active-panel");
@@ -744,68 +719,45 @@
     
     // ==================== INITIALIZATION ====================
     async function init() {
-        console.log("🚀 Initializing app...");
-        
         attendanceVideo = document.getElementById('attendanceVideo');
         attendanceCanvas = document.getElementById('attendanceCanvas');
         registerVideo = document.getElementById('registerVideo');
         registerCanvas = document.getElementById('registerCanvas');
         
-        // Set canvas dimensions
         function setupCanvas() {
             const wrapper = document.querySelector('.video-wrapper');
             if(wrapper) {
                 const rect = wrapper.getBoundingClientRect();
-                if(rect.width > 0) {
-                    attendanceCanvas.width = rect.width;
-                    attendanceCanvas.height = rect.height;
-                    registerCanvas.width = rect.width;
-                    registerCanvas.height = rect.height;
-                }
+                attendanceCanvas.width = rect.width;
+                attendanceCanvas.height = rect.height;
+                registerCanvas.width = rect.width;
+                registerCanvas.height = rect.height;
             }
         }
         setTimeout(setupCanvas, 100);
         window.addEventListener('resize', setupCanvas);
         
         updateDebug(attendanceDebugDiv, "🚀 جاري تشغيل التطبيق...");
-        updateDebug(registerDebugDiv, "🚀 جاري تشغيل التطبيق...");
-        
-        // Test button click detection
-        captureRegisterBtn.addEventListener('click', (e) => {
-            console.log("BUTTON CLICK DETECTED - Register button");
-            registerFace();
-        });
-        
-        captureAttendanceBtn.addEventListener('click', (e) => {
-            console.log("BUTTON CLICK DETECTED - Attendance button");
-            takeAttendance();
-        });
-        
-        takeAttendanceBtn.addEventListener('click', () => setMode("attendance"));
-        registerFaceBtn.addEventListener('click', () => setMode("register"));
         
         await loadMembers();
         await loadFaceDescriptors();
         await loadModels();
         await startCameraForAttendance();
         
-        updateDebug(attendanceDebugDiv, "✅ التطبيق جاهز للعمل!");
-        updateDebug(registerDebugDiv, "✅ التطبيق جاهز للعمل!");
+        captureAttendanceBtn.addEventListener('click', takeAttendance);
+        captureRegisterBtn.addEventListener('click', registerFace);
+        takeAttendanceBtn.addEventListener('click', () => setMode("attendance"));
+        registerFaceBtn.addEventListener('click', () => setMode("register"));
         
-        // Check if models loaded
-        setTimeout(() => {
-            if(!modelsLoaded) {
-                updateDebug(attendanceDebugDiv, "⚠️ النماذج لم يتم تحميلها بعد. تحقق من الاتصال بالإنترنت", true);
-            }
-        }, 10000);
+        updateDebug(attendanceDebugDiv, "✅ التطبيق جاهز! انظر إلى الكاميرا - سيظهر إطار أخضر حول الوجه");
     }
     
     window.addEventListener('beforeunload', () => {
+        if(animationFrameId) cancelAnimationFrame(animationFrameId);
         if(attendanceStream) attendanceStream.getTracks().forEach(t => t.stop());
         if(registerStream) registerStream.getTracks().forEach(t => t.stop());
     });
     
-    // Start after page fully loads
     window.addEventListener('load', init);
 </script>
 </body>
