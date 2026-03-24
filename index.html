@@ -440,16 +440,11 @@
         try {
             updateDebug(attendanceDebugDiv, `📤 Marking attendance for ${name} at row ${rowIndex}, column ${columnIndex}...`);
             
-            const response = await fetch(APPS_SCRIPT_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    action: "markAttendance", 
-                    name: name,
-                    row: rowIndex,
-                    column: columnIndex
-                })
-            });
+           const url = `${APPS_SCRIPT_URL}?action=markAttendance&name=${encodeURIComponent(name)}&row=${rowIndex}&column=${columnIndex}`;
+
+const response = await fetch(url);
+const result = await response.json();
+return result;
             
             const result = await response.json();
             return result;
