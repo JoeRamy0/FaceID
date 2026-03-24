@@ -489,6 +489,9 @@
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
             videoElement.srcObject = stream;
             await videoElement.play();
+            videoElement.setAttribute('autoplay', '');
+videoElement.setAttribute('muted', '');
+videoElement.setAttribute('playsinline', '');
             return stream;
         }
     }
@@ -695,18 +698,16 @@
     }
 
     // 3. Handle Canvas Responsiveness
-    function setupCanvas() {
-        const wrapper = document.querySelector('.video-wrapper');
-        if (wrapper) {
-            const rect = wrapper.getBoundingClientRect();
-            if (rect.width > 0) {
-                attendanceCanvas.width = rect.width;
-                attendanceCanvas.height = rect.height;
-                registerCanvas.width = rect.width;
-                registerCanvas.height = rect.height;
-            }
-        }
+   function setupCanvas() {
+    const video = (attendancePanelDiv.classList.contains('active-panel')) ? attendanceVideo : registerVideo;
+    const canvas = (attendancePanelDiv.classList.contains('active-panel')) ? attendanceCanvas : registerCanvas;
+    
+    if (video.videoWidth > 0) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        faceapi.matchDimensions(canvas, { width: video.videoWidth, height: video.videoHeight });
     }
+}
     
     // Initial setup and listener for screen rotation/resize
     setupCanvas();
