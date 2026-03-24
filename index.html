@@ -18,7 +18,7 @@
             padding: 20px;
         }
         .app-container {
-            max-width: 650px;
+            max-width: 700px;
             width: 100%;
             background: rgba(255,255,255,0.95);
             border-radius: 2rem;
@@ -32,6 +32,7 @@
             text-align: center;
         }
         .header h1 { margin: 0; font-size: 1.6rem; }
+        .header p { margin: 0.3rem 0 0; font-size: 0.8rem; opacity: 0.9; }
         .mode-selector {
             display: flex;
             gap: 0.8rem;
@@ -99,6 +100,26 @@
             cursor: pointer;
         }
         .cam-btn.active { background: #1e3c72; color: white; }
+        .date-selector {
+            background: #f0f4fa;
+            border-radius: 2rem;
+            padding: 0.8rem;
+            margin-bottom: 1rem;
+        }
+        .date-selector label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #1e3c72;
+        }
+        .date-selector select {
+            width: 100%;
+            padding: 0.7rem;
+            border-radius: 2rem;
+            border: 1px solid #bdc3d0;
+            font-size: 0.9rem;
+            background: white;
+        }
         .status {
             background: #eef2f7;
             border-radius: 2rem;
@@ -150,7 +171,7 @@
             background: #f8f9fa;
             padding: 0.5rem;
             border-radius: 0.5rem;
-            max-height: 150px;
+            max-height: 120px;
             overflow-y: auto;
             font-family: monospace;
         }
@@ -176,6 +197,17 @@
             font-size: 10px;
             z-index: 10;
         }
+        .sync-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 0.5rem;
+            border-radius: 2rem;
+            font-size: 0.8rem;
+            cursor: pointer;
+            margin-top: 0.5rem;
+            width: 100%;
+        }
     </style>
 </head>
 <body>
@@ -200,10 +232,19 @@
             <button id="attendanceFrontCam" class="cam-btn active">🤳 Front</button>
             <button id="attendanceBackCam" class="cam-btn">📱 Back</button>
         </div>
+        
+        <!-- Date Selector -->
+        <div class="date-selector">
+            <label>📅 Select Date for Attendance</label>
+            <select id="attendanceDateSelect">
+                <option value="">Loading dates...</option>
+            </select>
+        </div>
+        
         <button id="captureAttendance" class="btn-capture">🔍 Recognize & Mark Attendance</button>
         <div id="attendanceStatus" class="status">⏳ Loading AI models...</div>
         <div class="progress-bar"><div id="attendanceProgress" class="progress-fill"></div></div>
-        <div id="attendanceResult" class="result-area"><div style="text-align:center;color:#6c757d;">📋 Today's attendance will appear here</div></div>
+        <div id="attendanceResult" class="result-area"><div style="text-align:center;color:#6c757d;">📋 Attendance for selected date will appear here</div></div>
         <div id="attendanceDebug" class="debug-info"></div>
     </div>
 
@@ -227,19 +268,18 @@
         <div class="progress-bar"><div id="registerProgress" class="progress-fill"></div></div>
         <div id="registerDebug" class="debug-info"></div>
     </div>
-    <div class="footer">🔗 Data saved to Google Sheets via Forms | No CORS issues!</div>
+    <div class="footer">🔗 Select date, then scan face to mark attendance | Data saved locally</div>
 </div>
 
 <script>
     // ==================== CONFIGURATION ====================
-    // REPLACE THESE WITH YOUR ACTUAL GOOGLE FORM URLs
-    const FACE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfOUfMZ_DGPlqInzMMWcRl97EKuA9PfLw6rdz-zaY2Dj4Wjfg/formResponse";
-    const ATTENDANCE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdPKqBoUlEDfIs_gpFG2PFyFLGpTa1RucwbLEMHEAlzqD6bEg/formResponse";
-    
-    // Google Sheets published JSON URL for reading members (works with CORS)
+    // Google Sheets published JSON URL for reading members and dates
     const SHEET_ID = '1VYIPqwlbTAA8_NvXT6pUMxIcT8f6Jq2hoayGt1UMNr0';
     const SHEET_GID = '0';
     const GOOGLE_SHEETS_JSON_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${SHEET_GID}`;
+    
+    // Apps Script URL for marking attendance (POST)
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/YOUR_APPS_SCRIPT_URL/exec";
     
     const MODEL_URL = './models';
     
@@ -249,6 +289,7 @@
     let attendanceStream = null, registerStream = null;
     let membersList = [];
     let faceDescriptorsDB = [];
+    let dateHeaders = []; // Store date columns from Sheet1
     let isProcessing = false;
     let currentAttendanceCamera = 'user';
     let currentRegisterCamera = 'user';
@@ -275,11 +316,18 @@
     const attendanceBackCam = document.getElementById('attendanceBackCam');
     const registerFrontCam = document.getElementById('registerFrontCam');
     const registerBackCam = document.getElementById('registerBackCam');
+    const attendanceDateSelect = document.getElementById('attendanceDateSelect');
     
     function getLocalDate() {
         const d = new Date();
         d.setHours(d.getHours() + 2);
         return d.toISOString().slice(0, 10);
+    }
+    
+    function formatDate(dateObj) {
+        if (!dateObj) return '';
+        const d = new Date(dateObj);
+        return d.toLocaleDateString('en-CA'); // YYYY-MM-DD
     }
     
     function updateStatus(element, message, type = 'info') {
@@ -300,10 +348,10 @@
         if (element) element.style.width = percent + '%';
     }
     
-    // ==================== LOAD MEMBERS FROM GOOGLE SHEETS ====================
-    async function loadMembers() {
+    // ==================== LOAD MEMBERS AND DATES FROM GOOGLE SHEETS ====================
+    async function loadSheetData() {
         try {
-            updateDebug(attendanceDebugDiv, "📥 Loading members from Google Sheets...");
+            updateDebug(attendanceDebugDiv, "📥 Loading data from Google Sheets...");
             const response = await fetch(GOOGLE_SHEETS_JSON_URL);
             const text = await response.text();
             
@@ -311,201 +359,89 @@
             const data = JSON.parse(jsonStr);
             
             const rows = data.table.rows;
-            const members = [];
+            const headers = data.table.cols.map(col => col.label);
             
+            // Extract date headers (skip first column which is "الأسم")
+            dateHeaders = [];
+            for (let i = 1; i < headers.length; i++) {
+                const header = headers[i];
+                // Check if it's a date (has a date-like value)
+                if (rows[0] && rows[0].c[i] && rows[0].c[i].v) {
+                    const dateValue = rows[0].c[i].v;
+                    if (dateValue instanceof Date || (typeof dateValue === 'string' && dateValue.includes('-'))) {
+                        dateHeaders.push({
+                            column: i + 1, // 1-indexed column for API
+                            date: new Date(dateValue),
+                            dateStr: formatDate(dateValue)
+                        });
+                    }
+                }
+            }
+            
+            // Populate date dropdown
+            attendanceDateSelect.innerHTML = '<option value="">-- Select Date --</option>';
+            dateHeaders.forEach(dateInfo => {
+                const option = document.createElement('option');
+                option.value = dateInfo.column;
+                option.textContent = dateInfo.dateStr;
+                attendanceDateSelect.appendChild(option);
+            });
+            
+            // Load members (skip header row)
+            const members = [];
             for (let i = 1; i < rows.length; i++) {
                 const nameCell = rows[i].c[0];
                 if (nameCell && nameCell.v && nameCell.v.toString().trim() !== '') {
                     members.push({
                         name: nameCell.v.toString().trim(),
-                        rowIndex: i + 1
+                        rowIndex: i + 1 // 1-indexed row for API
                     });
                 }
             }
             
             membersList = members;
-            updateDebug(attendanceDebugDiv, `✅ Loaded ${membersList.length} members from Google Sheets`);
+            updateDebug(attendanceDebugDiv, `✅ Loaded ${membersList.length} members and ${dateHeaders.length} dates`);
             return true;
         } catch (err) {
-            updateDebug(attendanceDebugDiv, `❌ Error loading members: ${err.message}`, true);
+            updateDebug(attendanceDebugDiv, `❌ Error loading data: ${err.message}`, true);
             return false;
         }
     }
     
-    // ==================== SUBMIT TO GOOGLE FORMS (NO CORS!) ====================
-    async function submitToGoogleForm(formUrl, formData) {
-        // Create a hidden iframe to submit the form (bypasses CORS)
-        return new Promise((resolve, reject) => {
-            const iframe = document.createElement('iframe');
-            iframe.style.display = 'none';
-            document.body.appendChild(iframe);
-            
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = formUrl;
-            form.target = iframe.name || 'hiddenFrame';
-            iframe.name = 'hiddenFrame';
-            
-            // Add form data
-            for (const [key, value] of Object.entries(formData)) {
-                const input = document.createElement('input');
-                input.type = 'text';
-                input.name = key;
-                input.value = value;
-                form.appendChild(input);
-            }
-            
-            // Handle response
-            iframe.onload = () => {
-                setTimeout(() => {
-                    document.body.removeChild(iframe);
-                    resolve({ success: true });
-                }, 1000);
-            };
-            
-            setTimeout(() => {
-                document.body.removeChild(iframe);
-                reject(new Error('Form submission timeout'));
-            }, 5000);
-            
-            document.body.appendChild(form);
-            form.submit();
-        });
-    }
-    
-    // ==================== FACE DATA STORAGE (Using Google Form) ====================
-    async function loadFaceDescriptors() {
-        // For loading faces, we'll use localStorage since we can't query forms
-        // The admin can export faces from Google Sheets and we load from there?
-        // For now, use localStorage
-        const stored = localStorage.getItem('face_descriptors');
-        if (stored) {
-            try {
-                const faces = JSON.parse(stored);
-                faceDescriptorsDB = faces.map(f => ({ 
-                    name: f.name, 
-                    descriptor: new Float32Array(f.descriptor) 
-                }));
-                updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} face descriptors from local storage`);
-                return true;
-            } catch(e) {
-                updateDebug(attendanceDebugDiv, `⚠️ Error parsing stored faces`, true);
-            }
-        }
-        updateDebug(attendanceDebugDiv, `📭 No stored face descriptors found`);
-        return true;
-    }
-    
-    async function saveFaceToSheet(name, descriptorArray) {
+    // ==================== MARK ATTENDANCE IN SHEET1 VIA APPS SCRIPT ====================
+    async function markAttendanceInSheet(name, rowIndex, columnIndex) {
         try {
-            updateDebug(registerDebugDiv, `💾 Saving face to Google Forms...`);
+            updateDebug(attendanceDebugDiv, `📤 Marking attendance for ${name} at row ${rowIndex}, column ${columnIndex}...`);
             
-            // Prepare form data - you need to get the entry IDs from your form
-            // To get entry IDs: Open your form, inspect the input fields
-            // They look like: entry.123456789
-            const formData = {
-                "entry.1248883551": name,
-                "entry.1486586589": JSON.stringify(Array.from(descriptorArray))
-            };
-            
-            await submitToGoogleForm(FACE_FORM_URL, formData);
-            
-            // Also save to localStorage as backup
-            const newDescFloat = { name, descriptor: new Float32Array(descriptorArray) };
-            const memIdx = faceDescriptorsDB.findIndex(f => f.name === name);
-            if (memIdx !== -1) faceDescriptorsDB[memIdx] = newDescFloat;
-            else faceDescriptorsDB.push(newDescFloat);
-            
-            const backupFaces = faceDescriptorsDB.map(f => ({ 
-                name: f.name, 
-                descriptor: Array.from(f.descriptor) 
-            }));
-            localStorage.setItem('face_descriptors', JSON.stringify(backupFaces));
-            
-            updateDebug(registerDebugDiv, `✅ Face saved to Google Forms for ${name}`);
-            return { success: true };
-        } catch (err) {
-            updateDebug(registerDebugDiv, `❌ Error: ${err.message}`, true);
-            
-            // Fallback to localStorage only
-            const newDesc = { name, descriptor: Array.from(descriptorArray) };
-            const existing = faceDescriptorsDB.map(f => ({ name: f.name, descriptor: Array.from(f.descriptor) }));
-            const idx = existing.findIndex(f => f.name === name);
-            if (idx !== -1) existing[idx] = newDesc;
-            else existing.push(newDesc);
-            
-            localStorage.setItem('face_descriptors', JSON.stringify(existing));
-            
-            const newDescFloat = { name, descriptor: new Float32Array(descriptorArray) };
-            const memIdx = faceDescriptorsDB.findIndex(f => f.name === name);
-            if (memIdx !== -1) faceDescriptorsDB[memIdx] = newDescFloat;
-            else faceDescriptorsDB.push(newDescFloat);
-            
-            updateDebug(registerDebugDiv, `⚠️ Saved to local storage only`);
-            return { success: true, warning: 'Saved locally only' };
-        }
-    }
-    
-    // ==================== MARK ATTENDANCE (Using Google Form) ====================
-    // ==================== MARK ATTENDANCE (Name Only - No Date) ====================
-async function markAttendanceInSheet(name) {
-    const todayStr = getLocalDate();
-    
-    try {
-        updateDebug(attendanceDebugDiv, `📤 Marking attendance for ${name}...`);
-        
-        // Only send the name (no date field)
-        const formData = {
-            "entry.635050356": name  // Replace with your actual entry ID
-        };
-        
-        await submitToGoogleForm(ATTENDANCE_FORM_URL, formData);
-        
-        updateDebug(attendanceDebugDiv, `✅ Attendance marked for ${name} on ${todayStr}`);
-        
-        // Also save to localStorage for display
-        const stored = localStorage.getItem('attendance_log') || '[]';
-        const log = JSON.parse(stored);
-        const alreadyMarked = log.some(entry => entry.name === name && entry.date === todayStr);
-        
-        if (!alreadyMarked) {
-            log.push({ name, date: todayStr, timestamp: new Date().toISOString() });
-            localStorage.setItem('attendance_log', JSON.stringify(log));
-        }
-        
-        return { success: true };
-    } catch (err) {
-        updateDebug(attendanceDebugDiv, `❌ Error: ${err.message}`, true);
-        
-        // Fallback to localStorage
-        const stored = localStorage.getItem('attendance_log') || '[]';
-        const log = JSON.parse(stored);
-        const alreadyMarked = log.some(entry => entry.name === name && entry.date === todayStr);
-        
-        if (!alreadyMarked) {
-            log.push({ name, date: todayStr, timestamp: new Date().toISOString() });
-            localStorage.setItem('attendance_log', JSON.stringify(log));
-            updateDebug(attendanceDebugDiv, `⚠️ Attendance saved locally only`);
-            return { success: true, alreadyMarked: false, localOnly: true };
-        }
-        return { success: true, alreadyMarked: true };
-    }
-}
-    
-    // Display today's attendance
-    function displayTodayAttendance() {
-        const todayStr = getLocalDate();
-        const stored = localStorage.getItem('attendance_log') || '[]';
-        const log = JSON.parse(stored);
-        const todayAttendance = log.filter(entry => entry.date === todayStr);
-        
-        attendanceResultDiv.innerHTML = '';
-        if (todayAttendance.length === 0) {
-            attendanceResultDiv.innerHTML = '<div style="text-align:center;color:#6c757d;">📋 No attendance recorded yet today</div>';
-        } else {
-            todayAttendance.forEach(entry => {
-                attendanceResultDiv.innerHTML += `<div class="attendance-item"><span>⛪ ${entry.name}</span><span class="badge">${entry.date}</span></div>`;
+            const response = await fetch(APPS_SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: "markAttendance", 
+                    name: name,
+                    row: rowIndex,
+                    column: columnIndex
+                })
             });
+            
+            const result = await response.json();
+            return result;
+        } catch (err) {
+            updateDebug(attendanceDebugDiv, `❌ Error: ${err.message}`, true);
+            
+            // Fallback to localStorage
+            const todayStr = getLocalDate();
+            const stored = localStorage.getItem('attendance_log') || '[]';
+            const log = JSON.parse(stored);
+            const alreadyMarked = log.some(entry => entry.name === name && entry.date === todayStr);
+            
+            if (!alreadyMarked) {
+                log.push({ name, date: todayStr, column: columnIndex, timestamp: new Date().toISOString() });
+                localStorage.setItem('attendance_log', JSON.stringify(log));
+                updateDebug(attendanceDebugDiv, `⚠️ Attendance saved locally only`);
+                return { success: true, alreadyMarked: false, localOnly: true };
+            }
+            return { success: true, alreadyMarked: true };
         }
     }
     
@@ -607,6 +543,49 @@ async function markAttendanceInSheet(name) {
         }, 150);
     }
     
+    // ==================== FACE DESCRIPTORS (Local Storage) ====================
+    async function loadFaceDescriptors() {
+        const stored = localStorage.getItem('face_descriptors');
+        if (stored) {
+            try {
+                const faces = JSON.parse(stored);
+                faceDescriptorsDB = faces.map(f => ({ 
+                    name: f.name, 
+                    descriptor: new Float32Array(f.descriptor) 
+                }));
+                updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} face descriptors`);
+                return true;
+            } catch(e) {
+                updateDebug(attendanceDebugDiv, `⚠️ Error parsing stored faces`, true);
+            }
+        }
+        updateDebug(attendanceDebugDiv, `📭 No stored face descriptors found`);
+        return true;
+    }
+    
+    async function saveFaceToLocal(name, descriptorArray) {
+        try {
+            const newDesc = { name, descriptor: Array.from(descriptorArray) };
+            const existing = faceDescriptorsDB.map(f => ({ name: f.name, descriptor: Array.from(f.descriptor) }));
+            const idx = existing.findIndex(f => f.name === name);
+            if (idx !== -1) existing[idx] = newDesc;
+            else existing.push(newDesc);
+            
+            localStorage.setItem('face_descriptors', JSON.stringify(existing));
+            
+            const newDescFloat = { name, descriptor: new Float32Array(descriptorArray) };
+            const memIdx = faceDescriptorsDB.findIndex(f => f.name === name);
+            if (memIdx !== -1) faceDescriptorsDB[memIdx] = newDescFloat;
+            else faceDescriptorsDB.push(newDescFloat);
+            
+            updateDebug(registerDebugDiv, `✅ Face saved for ${name}`);
+            return { success: true };
+        } catch (err) {
+            updateDebug(registerDebugDiv, `❌ Error saving face: ${err.message}`, true);
+            return { success: false, error: err.message };
+        }
+    }
+    
     function findBestMatch(descriptor, threshold = 0.6) {
         if (faceDescriptorsDB.length === 0) return null;
         
@@ -657,7 +636,7 @@ async function markAttendanceInSheet(name) {
         if (attendanceStream) {
             const info = document.getElementById('attendanceCameraInfo');
             if (info) info.innerHTML = currentAttendanceCamera === 'user' ? '🤳 Front' : '📱 Back';
-            updateDebug(attendanceDebugDiv, `Camera started: ${currentAttendanceCamera === 'user' ? 'Front' : 'Back'}`);
+            updateDebug(attendanceDebugDiv, `Camera started`);
             startDetectionLoop(attendanceVideo, attendanceCanvas, attendanceFaceIndicator);
             return true;
         }
@@ -671,7 +650,7 @@ async function markAttendanceInSheet(name) {
         if (registerStream) {
             const info = document.getElementById('registerCameraInfo');
             if (info) info.innerHTML = currentRegisterCamera === 'user' ? '🤳 Front' : '📱 Back';
-            updateDebug(registerDebugDiv, `Camera started: ${currentRegisterCamera === 'user' ? 'Front' : 'Back'}`);
+            updateDebug(registerDebugDiv, `Camera started`);
             startDetectionLoop(registerVideo, registerCanvas, registerFaceIndicator);
             return true;
         }
@@ -696,9 +675,34 @@ async function markAttendanceInSheet(name) {
         startRegisterCamera();
     }
     
+    // ==================== DISPLAY ATTENDANCE FOR SELECTED DATE ====================
+    function displayAttendanceForDate(selectedDate) {
+        const stored = localStorage.getItem('attendance_log') || '[]';
+        const log = JSON.parse(stored);
+        const todayAttendance = log.filter(entry => entry.date === selectedDate);
+        
+        attendanceResultDiv.innerHTML = '';
+        if (todayAttendance.length === 0) {
+            attendanceResultDiv.innerHTML = '<div style="text-align:center;color:#6c757d;">📋 No attendance recorded for this date</div>';
+        } else {
+            todayAttendance.forEach(entry => {
+                attendanceResultDiv.innerHTML += `<div class="attendance-item"><span>⛪ ${entry.name}</span><span class="badge">${entry.date}</span></div>`;
+            });
+        }
+    }
+    
     // ==================== ACTIONS ====================
     async function takeAttendance() {
         console.log("=== TAKE ATTENDANCE ===");
+        
+        const selectedColumn = attendanceDateSelect.value;
+        const selectedDateText = attendanceDateSelect.options[attendanceDateSelect.selectedIndex]?.text;
+        
+        if (!selectedColumn) {
+            updateStatus(attendanceStatusDiv, "⚠️ Please select a date first", "warning");
+            return;
+        }
+        
         if (isProcessing) { updateStatus(attendanceStatusDiv, "Please wait...", "warning"); return; }
         if (!modelsLoaded) { await loadModels(); if (!modelsLoaded) return; }
         if (!attendanceVideo.videoWidth) {
@@ -731,12 +735,28 @@ async function markAttendanceInSheet(name) {
                 return;
             }
             
+            // Find the person's row in membersList
+            const person = membersList.find(m => m.name === match.name);
+            if (!person) {
+                updateStatus(attendanceStatusDiv, `❌ ${match.name} not found in member list`, "error");
+                isProcessing = false;
+                captureAttendanceBtn.disabled = false;
+                return;
+            }
+            
             updateStatus(attendanceStatusDiv, `✅ Recognized: ${match.name}`, "success");
-            const result = await markAttendanceInSheet(match.name);
+            
+            // Mark attendance at the specific row and column
+            const result = await markAttendanceInSheet(match.name, person.rowIndex, parseInt(selectedColumn));
             
             if (result?.success) {
-                displayTodayAttendance();
-                updateDebug(attendanceDebugDiv, `✓ Attendance marked for ${match.name}`);
+                if (result.alreadyMarked) {
+                    updateStatus(attendanceStatusDiv, `⚠️ ${match.name} already marked for ${selectedDateText}`, "warning");
+                } else {
+                    updateStatus(attendanceStatusDiv, `✅ ${match.name} marked present for ${selectedDateText}`, "success");
+                }
+                displayAttendanceForDate(selectedDateText);
+                updateDebug(attendanceDebugDiv, `✓ Attendance marked for ${match.name} at column ${selectedColumn}`);
             } else {
                 updateStatus(attendanceStatusDiv, `⚠️ Could not mark attendance`, "error");
             }
@@ -783,7 +803,7 @@ async function markAttendanceInSheet(name) {
             }
             
             updateStatus(registerStatusDiv, "💾 Saving...", "info");
-            const result = await saveFaceToSheet(name, detection.descriptor);
+            const result = await saveFaceToLocal(name, detection.descriptor);
             
             if (result?.success) {
                 updateStatus(registerStatusDiv, `✅ Registered ${name}!`, "success");
@@ -809,7 +829,6 @@ async function markAttendanceInSheet(name) {
             registerFaceBtn.classList.remove("active");
             if (registerStream) { registerStream.getTracks().forEach(t => t.stop()); registerStream = null; }
             startAttendanceCamera();
-            displayTodayAttendance();
         } else {
             attendancePanelDiv.classList.remove("active-panel");
             registerPanelDiv.classList.add("active-panel");
@@ -852,6 +871,14 @@ async function markAttendanceInSheet(name) {
         takeAttendanceBtn.onclick = () => setMode("attendance");
         registerFaceBtn.onclick = () => setMode("register");
         
+        // Update display when date changes
+        attendanceDateSelect.onchange = () => {
+            const selectedDateText = attendanceDateSelect.options[attendanceDateSelect.selectedIndex]?.text;
+            if (selectedDateText) {
+                displayAttendanceForDate(selectedDateText);
+            }
+        };
+        
         updateDebug(attendanceDebugDiv, "🚀 Starting application...");
         
         try {
@@ -864,14 +891,13 @@ async function markAttendanceInSheet(name) {
             updateDebug(attendanceDebugDiv, `⚠️ Engine: CPU (Slow Mode)`);
         }
         
-        await loadMembers();
+        await loadSheetData();
         await loadFaceDescriptors();
         await loadModels();
         await startAttendanceCamera();
-        displayTodayAttendance();
         
-        updateDebug(attendanceDebugDiv, "✅ System Ready! Look for GREEN box around your face");
-        updateDebug(attendanceDebugDiv, "📌 To get form entry IDs: Open your form, inspect the input fields");
+        updateDebug(attendanceDebugDiv, "✅ System Ready! Select a date, then look at camera");
+        updateDebug(attendanceDebugDiv, "📌 Face data saved locally. Export feature coming soon.");
     }
     
     window.onload = init;
