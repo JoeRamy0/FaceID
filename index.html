@@ -6,11 +6,12 @@
     <title>St. Joseph Attendance Pro - Face Recognition</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <!-- Face API Libraries with proper CDN -->
+    <!-- Face API Libraries with correct CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     
     <style>
+        /* Keep all your existing styles - they are correct */
         * {
             margin: 0;
             padding: 0;
@@ -1273,12 +1274,16 @@
             
             statusDiv.style.display = 'block';
             statusDiv.innerHTML = '<span>📥 Loading face detection models...</span>';
+            statusDiv.innerHTML += '<br><span style="font-size: 10px;">This may take 10-20 seconds on first load</span>';
             
             try {
+                // Use the correct model URL from face-api.js CDN
+                const MODEL_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/models';
+                
                 await Promise.all([
-                    faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/models'),
-                    faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/models'),
-                    faceapi.nets.faceRecognitionNet.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/models')
+                    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
                 ]);
                 
                 faceModelsLoaded = true;
@@ -1289,7 +1294,7 @@
                 return true;
             } catch (error) {
                 console.error('Error loading face models:', error);
-                statusDiv.innerHTML = '<span>❌ Failed to load face models. Check internet connection.</span>';
+                statusDiv.innerHTML = '<span>❌ Failed to load face models. Check internet connection and refresh.</span>';
                 return false;
             }
         }
@@ -1922,24 +1927,24 @@
             }
         }
         
-     function renderAbsenceGroups(data) {
-    const container = document.getElementById('absenceGroupsContainer');
-    if (!container) return;
-    container.innerHTML = currentGroups.map(groupName => {
-        const group = data.groups[groupName];
-        if (!group) return '';
-        const absentList = group.absentNames.map(name => `<div style="padding: 8px; background:#fee2e2; margin:4px 0; border-radius:8px;">❌ ${escapeHtml(name)}</div>`).join('');
-        return `<div class="group-card">
-                    <div class="group-title">${groupName} - ${group.percentage}%</div>
-                    <div class="group-stats">
-                        <div>Total: ${group.total}</div>
-                        <div class="present">Present: ${group.present}</div>
-                        <div class="absent">Absent: ${group.absent}</div>
-                    </div>
-                    ${group.absent > 0 ? `<div><strong>Absent (${group.absent}):</strong>${absentList}</div>` : '<div>✅ All present</div>'}
-                </div>`;
-    }).join('');
-}
+        function renderAbsenceGroups(data) {
+            const container = document.getElementById('absenceGroupsContainer');
+            if (!container) return;
+            container.innerHTML = currentGroups.map(groupName => {
+                const group = data.groups[groupName];
+                if (!group) return '';
+                const absentList = group.absentNames.map(name => `<div style="padding: 8px; background:#fee2e2; margin:4px 0; border-radius:8px;">❌ ${escapeHtml(name)}</div>`).join('');
+                return `<div class="group-card">
+                            <div class="group-title">${groupName} - ${group.percentage}%</div>
+                            <div class="group-stats">
+                                <div>Total: ${group.total}</div>
+                                <div class="present">Present: ${group.present}</div>
+                                <div class="absent">Absent: ${group.absent}</div>
+                            </div>
+                            ${group.absent > 0 ? `<div><strong>Absent (${group.absent}):</strong>${absentList}</div>` : '<div>✅ All present</div>'}
+                        </div>`;
+            }).join('');
+        }
         
         function exportAbsenceToExcel() {
             if (!absenceData) return;
