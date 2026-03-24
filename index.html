@@ -1,18 +1,16 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>AI Face Attendance | St. Joseph Church</title>
-    <!-- Face-api.js models & libraries -->
+    <title>نظام الحضور بالتعرف على الوجه | كنيسة القديس يوسف</title>
     <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.15.0/dist/tf-core.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.15.0/dist/tf-converter.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-landmarks-detection@1.0.2/dist/face-landmarks-detection.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', 'Tahoma', sans-serif;
         }
         body {
             background: linear-gradient(145deg, #f0f4fa 0%, #d9e2ef 100%);
@@ -24,14 +22,12 @@
             padding: 20px;
         }
         .app-container {
-            max-width: 550px;
+            max-width: 600px;
             width: 100%;
             background: rgba(255,255,255,0.95);
             border-radius: 2rem;
             box-shadow: 0 25px 45px rgba(0,0,0,0.2);
             overflow: hidden;
-            backdrop-filter: blur(2px);
-            transition: all 0.2s;
         }
         .header {
             background: #1e3c72;
@@ -42,12 +38,6 @@
         .header h1 {
             margin: 0;
             font-size: 1.6rem;
-            letter-spacing: -0.5px;
-        }
-        .header p {
-            margin: 0.3rem 0 0;
-            font-size: 0.8rem;
-            opacity: 0.9;
         }
         .mode-selector {
             display: flex;
@@ -66,7 +56,6 @@
             cursor: pointer;
             transition: 0.2s;
             font-size: 1rem;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
         }
         .mode-btn.active {
             background: #1e3c72;
@@ -88,12 +77,12 @@
             margin-bottom: 1rem;
             position: relative;
         }
-        video, canvas {
+        video {
             width: 100%;
             height: 100%;
             object-fit: cover;
         }
-        .canvas-overlay {
+        canvas {
             position: absolute;
             top: 0;
             left: 0;
@@ -114,6 +103,10 @@
             margin-top: 0.5rem;
         }
         .btn-capture:active { transform: scale(0.97);}
+        .btn-capture:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
         .status {
             background: #eef2f7;
             border-radius: 2rem;
@@ -122,6 +115,18 @@
             font-size: 0.85rem;
             text-align: center;
             font-weight: 500;
+        }
+        .status.error {
+            background: #fee2e2;
+            color: #c33;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
         }
         .input-group {
             margin-bottom: 1rem;
@@ -144,33 +149,34 @@
             border-radius: 1.5rem;
             padding: 0.8rem;
             margin-top: 1rem;
-            max-height: 180px;
+            max-height: 250px;
             overflow-y: auto;
         }
         .attendance-item {
             background: white;
             margin: 0.3rem 0;
-            padding: 0.4rem 0.8rem;
+            padding: 0.5rem 0.8rem;
             border-radius: 2rem;
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             display: flex;
             justify-content: space-between;
+            align-items: center;
         }
         .badge {
             background: #2e7d32;
             color: white;
             border-radius: 20px;
-            padding: 0.1rem 0.6rem;
+            padding: 0.2rem 0.8rem;
+            font-size: 0.75rem;
+        }
+        .badge.warning {
+            background: #f39c12;
         }
         .loading {
             text-align: center;
             padding: 1rem;
             font-style: italic;
             color: gray;
-        }
-        button:disabled {
-            opacity: 0.6;
-            transform: none;
         }
         .small-note {
             font-size: 0.7rem;
@@ -185,69 +191,83 @@
             padding: 0.6rem;
             color: #4a627a;
         }
+        .debug-info {
+            font-size: 0.7rem;
+            color: #666;
+            margin-top: 0.5rem;
+            text-align: left;
+            word-break: break-all;
+            background: #f8f9fa;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            max-height: 80px;
+            overflow-y: auto;
+        }
+        .clear-log {
+            font-size: 0.7rem;
+            color: #dc3545;
+            cursor: pointer;
+            float: left;
+        }
     </style>
 </head>
 <body>
 <div class="app-container">
     <div class="header">
-        <h1>⛪ St. Joseph Church</h1>
-        <p>Face Recognition Attendance | Youth Servants</p>
+        <h1>⛪ كنيسة القديس يوسف</h1>
+        <p>نظام الحضور بالتعرف على الوجه</p>
     </div>
     <div class="mode-selector">
-        <button id="takeAttendanceBtn" class="mode-btn active">📸 Take Attendance</button>
-        <button id="registerFaceBtn" class="mode-btn">🆕 Register New Face</button>
+        <button id="takeAttendanceBtn" class="mode-btn active">📸 تسجيل الحضور</button>
+        <button id="registerFaceBtn" class="mode-btn">🆕 تسجيل وجه جديد</button>
     </div>
 
     <!-- Attendance Panel -->
     <div id="attendancePanel" class="panel active-panel">
         <div class="video-wrapper">
             <video id="attendanceVideo" autoplay muted playsinline></video>
-            <canvas id="attendanceCanvas" class="canvas-overlay"></canvas>
+            <canvas id="attendanceCanvas"></canvas>
         </div>
-        <button id="captureAttendance" class="btn-capture">🔍 Recognize & Mark Attendance</button>
-        <div id="attendanceStatus" class="status">✅ Ready. Click to match face with registered members.</div>
+        <button id="captureAttendance" class="btn-capture">🔍 تعرف على الوجه وسجل الحضور</button>
+        <div id="attendanceStatus" class="status">⏳ جاري تحميل النماذج...</div>
         <div id="attendanceResult" class="result-area">
-            <div style="text-align:center;color:#6c757d;">📋 Today's attendance will appear here</div>
+            <div style="text-align:center;color:#6c757d;">📋 سيظهر سجل الحضور هنا</div>
         </div>
-        <div class="small-note">📌 Make sure face is well-lit & visible. Matching uses FaceAPI descriptors.</div>
+        <div id="attendanceDebug" class="debug-info"></div>
     </div>
 
     <!-- Registration Panel -->
     <div id="registerPanel" class="panel">
         <div class="video-wrapper">
             <video id="registerVideo" autoplay muted playsinline></video>
-            <canvas id="registerCanvas" class="canvas-overlay"></canvas>
+            <canvas id="registerCanvas"></canvas>
         </div>
         <div class="input-group">
-            <label>👤 Full Name (exactly as in Sheet1)</label>
-            <input type="text" id="newUserName" placeholder="يوسف رامي سامي" autocomplete="off">
+            <label>👤 الاسم بالكامل (كما هو في شيت الأسماء)</label>
+            <input type="text" id="newUserName" placeholder="مثال: يوسف رامي سامي" autocomplete="off">
         </div>
-        <button id="captureRegister" class="btn-capture">📸 Capture Face & Register</button>
-        <div id="registerStatus" class="status">🆕 Fill name, then capture to save face descriptor.</div>
-        <div class="small-note">⚠️ Face will be stored locally & synced to Google Sheet (Sheet2). Already registered faces will be updated.</div>
+        <button id="captureRegister" class="btn-capture">📸 التقاط الوجه وتسجيله</button>
+        <div id="registerStatus" class="status">⏳ جاري تحميل النماذج...</div>
+        <div id="registerDebug" class="debug-info"></div>
     </div>
     <div class="footer">
-        🔗 Connected to Google Sheets | Data auto-sync | Face descriptors stored securely
+        🔗 متصل بـ Google Sheets | نظام التعرف على الوجه باستخدام FaceAPI
     </div>
 </div>
 
 <script>
-    // ------------------- CONFIGURATION -------------------
-    // ================ IMPORTANT: REPLACE WITH YOUR APP SCRIPT WEB APP URL ================
-    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbMd7ZvHyMVS_yUK6ANUEn4TYhLNe9o4hHz26q3Fp2a1yMhq6FlWSmgzvhBa4-MS2nug/exec"; 
-    // !! Replace with your actual Google Apps Script Web App URL !!
-    // The script must handle: ?action=getMembers, ?action=getFaceData, ?action=saveFace, ?action=markAttendance
-    // For testing without backend, we use demo fallback. But for real usage, set correct URL.
-
-    // ------------------- GLOBALS -------------------
-    let currentMode = "attendance"; // attendance or register
+    // ==================== CONFIGURATION ====================
+    // استبدل هذا الرابط برابط التطبيق الخاص بك من Google Apps Script
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbMd7ZvHyMVS_yUK6ANUEn4TYhLNe9o4hHz26q3Fp2a1yMhq6FlWSmgzvhBa4-MS2nug/exec";
+    
+    // ==================== GLOBALS ====================
     let modelsLoaded = false;
     let attendanceVideo, attendanceCanvas, registerVideo, registerCanvas;
     let attendanceStream = null, registerStream = null;
-    
-    // Data stores
-    let membersList = [];        // [{name, rowIndex}] from Sheet1 (names only)
-    let faceDescriptorsDB = [];  // [{name, descriptor: Float32Array}]
+    let membersList = [];
+    let faceDescriptorsDB = [];
+    let isProcessing = false;
+    let attendedToday = new Set();
     
     // UI Elements
     const takeAttendanceBtn = document.getElementById('takeAttendanceBtn');
@@ -259,14 +279,44 @@
     const attendanceStatusDiv = document.getElementById('attendanceStatus');
     const registerStatusDiv = document.getElementById('registerStatus');
     const attendanceResultDiv = document.getElementById('attendanceResult');
+    const attendanceDebugDiv = document.getElementById('attendanceDebug');
+    const registerDebugDiv = document.getElementById('registerDebug');
     const newUserNameInput = document.getElementById('newUserName');
     
-    // Helper: fetch from Google Sheets API
-    async function fetchFromSheets(action, payload = {}) {
-        if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL.includes("YourScriptID")) {
-            console.warn("Using DEMO data because Google Script URL not set.");
-            return demoFallback(action, payload);
+    // Helper: Get local date (Egypt timezone)
+    function getLocalDate() {
+        const d = new Date();
+        const offset = 2; // Egypt UTC+2
+        d.setHours(d.getHours() + offset);
+        return d.toISOString().slice(0, 10);
+    }
+    
+    // Helper: Update status with styling
+    function updateStatus(element, message, type = 'info') {
+        element.textContent = message;
+        element.className = 'status';
+        if (type === 'error') element.classList.add('error');
+        if (type === 'success') element.classList.add('success');
+        if (type === 'warning') element.classList.add('warning');
+    }
+    
+    function updateDebug(element, message, isError = false) {
+        const timestamp = new Date().toLocaleTimeString('ar-EG');
+        const prefix = isError ? '❌' : 'ℹ️';
+        element.innerHTML = `${prefix} [${timestamp}] ${message}<br>` + element.innerHTML;
+        // Keep only last 10 messages
+        const lines = element.innerHTML.split('<br>');
+        if (lines.length > 15) {
+            element.innerHTML = lines.slice(0, 15).join('<br>');
         }
+    }
+    
+    function clearDebug(element) {
+        element.innerHTML = '';
+    }
+    
+    // ==================== GOOGLE SHEETS API ====================
+    async function fetchFromSheets(action, payload = {}) {
         try {
             const params = new URLSearchParams({action, ...payload});
             const response = await fetch(`${GOOGLE_SCRIPT_URL}?${params.toString()}`, {
@@ -276,65 +326,44 @@
             const data = await response.json();
             return data;
         } catch (err) {
-            console.error("Fetch error", err);
-            return demoFallback(action, payload);
+            console.error("Fetch error:", err);
+            updateDebug(attendanceDebugDiv, `خطأ في الاتصال: ${err.message}`, true);
+            return { success: false, error: err.message };
         }
     }
     
-    // DEMO fallback (simulate Google Sheets content from your provided excel)
-    function demoFallback(action, payload) {
-        if (action === "getMembers") {
-            // Names extracted from your Sheet1 (first column)
-            const names = [
-                "يوسف رامي سامي", "بروكسيان مسعد لطفي", "اشرف مهدي لوندي", "مادونا بدري مسعود",
-                "مريم روماني فهمي", "دميانة تامر عدلي", "شيرين فرحات عبده", "سلوي بلامون وارث",
-                "ميرنا معزوز كامل", "فيرونيا تامر فتحي", "نورا رضا سعيد", "أبانوب ناجي غالي",
-                "باسم سلامة عوض", "جرجس ناجح بخيت", "چون حشمت حنا", "مينا غطاس رمزي"
-            ];
-            return { success: true, members: names.map((n,idx)=>({name:n, rowIndex:idx+2})) };
+    async function saveFaceToSheet(name, descriptorArray) {
+        try {
+            const response = await fetch(GOOGLE_SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: "saveFace",
+                    name: name,
+                    descriptor: Array.from(descriptorArray)
+                })
+            });
+            
+            const data = await response.json();
+            return data;
+        } catch (err) {
+            console.error("Save face error:", err);
+            updateDebug(registerDebugDiv, `خطأ في حفظ الوجه: ${err.message}`, true);
+            return { success: false, error: err.message };
         }
-        else if (action === "getFaceData") {
-            // retrieve stored descriptors (simulate from localStorage)
-            let stored = localStorage.getItem("face_descriptors_demo");
-            if(stored) return { success: true, faces: JSON.parse(stored) };
-            else return { success: true, faces: [] };
-        }
-        else if (action === "saveFace") {
-            // save face descriptor to localStorage demo
-            let existing = JSON.parse(localStorage.getItem("face_descriptors_demo") || "[]");
-            const newFace = { name: payload.name, descriptor: JSON.parse(payload.descriptor) };
-            const idx = existing.findIndex(f => f.name === newFace.name);
-            if(idx !== -1) existing[idx] = newFace;
-            else existing.push(newFace);
-            localStorage.setItem("face_descriptors_demo", JSON.stringify(existing));
-            return { success: true, message: "Face registered (demo)" };
-        }
-        else if (action === "markAttendance") {
-            // log attendance (demo)
-            let todayLog = JSON.parse(localStorage.getItem("attendance_log") || "[]");
-            const dateStr = new Date().toISOString().slice(0,10);
-            const existingEntry = todayLog.find(entry => entry.name === payload.name && entry.date === dateStr);
-            if(!existingEntry) {
-                todayLog.push({ name: payload.name, date: dateStr, timestamp: new Date().toISOString() });
-                localStorage.setItem("attendance_log", JSON.stringify(todayLog));
-            }
-            return { success: true, message: `Attendance marked for ${payload.name}` };
-        }
-        return { success: false };
     }
     
-    // Load members from sheet
     async function loadMembers() {
         const res = await fetchFromSheets("getMembers");
         if(res && res.success && res.members) {
             membersList = res.members;
-        } else {
-            membersList = [];
+            updateDebug(attendanceDebugDiv, `✅ تم تحميل ${membersList.length} عضو`);
+            return true;
         }
-        console.log(`Loaded ${membersList.length} members.`);
+        updateDebug(attendanceDebugDiv, `⚠️ فشل تحميل الأعضاء: ${res?.error || 'غير معروف'}`, true);
+        return false;
     }
     
-    // Load face descriptors from sheet (or local)
     async function loadFaceDescriptors() {
         const res = await fetchFromSheets("getFaceData");
         if(res && res.success && res.faces) {
@@ -342,67 +371,72 @@
                 name: f.name,
                 descriptor: new Float32Array(f.descriptor)
             }));
-        } else {
-            faceDescriptorsDB = [];
-        }
-        console.log(`Loaded ${faceDescriptorsDB.length} face descriptors.`);
-    }
-    
-    // Save new face descriptor to remote
-    async function saveFaceDescriptor(name, descriptorArray) {
-        const descriptorJSON = JSON.stringify(Array.from(descriptorArray));
-        const res = await fetchFromSheets("saveFace", { name, descriptor: descriptorJSON });
-        if(res && res.success) {
-            // also update local db
-            const idx = faceDescriptorsDB.findIndex(f => f.name === name);
-            const newDesc = { name, descriptor: new Float32Array(descriptorArray) };
-            if(idx !== -1) faceDescriptorsDB[idx] = newDesc;
-            else faceDescriptorsDB.push(newDesc);
+            updateDebug(attendanceDebugDiv, `✅ تم تحميل ${faceDescriptorsDB.length} بصمة وجه`);
             return true;
         }
         return false;
     }
     
-    // Mark attendance in sheet (log)
     async function markAttendanceInSheet(name) {
-        const res = await fetchFromSheets("markAttendance", { name, date: new Date().toISOString().slice(0,10) });
-        return res && res.success;
+        const dateStr = getLocalDate();
+        const res = await fetchFromSheets("markAttendance", { name, date: dateStr });
+        return res;
     }
     
-    // ---------- Face Recognition Helpers ----------
+    // ==================== FACE RECOGNITION ====================
     async function loadModels() {
         if(modelsLoaded) return true;
+        
+        updateStatus(attendanceStatusDiv, "📥 جاري تحميل نماذج الذكاء الاصطناعي...", "info");
+        updateStatus(registerStatusDiv, "📥 جاري تحميل نماذج الذكاء الاصطناعي...", "info");
+        
         const MODEL_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/models';
-        attendanceStatusDiv.innerText = "⏳ Loading AI models...";
-        registerStatusDiv.innerText = "⏳ Loading face models...";
+        
         try {
             await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
             await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
             await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+            await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
             modelsLoaded = true;
-            attendanceStatusDiv.innerText = "✅ Models ready. Click to recognize.";
-            registerStatusDiv.innerText = "✅ Models ready. Capture face to register.";
+            updateStatus(attendanceStatusDiv, "✅ النماذج جاهزة! اضغط للتعرف", "success");
+            updateStatus(registerStatusDiv, "✅ النماذج جاهزة! يمكنك تسجيل الوجه", "success");
             return true;
         } catch(e) {
-            console.error(e);
-            attendanceStatusDiv.innerText = "❌ Model load error. Check internet.";
-            registerStatusDiv.innerText = "❌ Model load error.";
+            console.error("Model load error:", e);
+            updateStatus(attendanceStatusDiv, `❌ خطأ في تحميل النماذج: ${e.message}`, "error");
+            updateStatus(registerStatusDiv, `❌ خطأ في تحميل النماذج: ${e.message}`, "error");
             return false;
         }
     }
     
     async function getFaceDescriptorFromVideo(videoElement) {
-        if(!videoElement.videoWidth || !videoElement.videoHeight) return null;
-        const detection = await faceapi.detectSingleFace(videoElement).withFaceLandmarks().withFaceDescriptor();
-        if(!detection) return null;
+        if(!videoElement.videoWidth || !videoElement.videoHeight) {
+            updateDebug(attendanceDebugDiv, "الكاميرا غير جاهزة بعد");
+            return null;
+        }
+        
+        const detection = await faceapi.detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions())
+            .withFaceLandmarks()
+            .withFaceDescriptor();
+        
+        if(!detection) {
+            updateDebug(attendanceDebugDiv, "لم يتم اكتشاف وجه - تأكد من الإضاءة والنظر للكاميرا");
+            return null;
+        }
+        
+        updateDebug(attendanceDebugDiv, `✅ تم اكتشاف وجه!`);
         return detection.descriptor;
     }
     
-    // Compare descriptor with registered DB, return best match
-    function findBestMatch(descriptor, threshold = 0.55) {
-        if(faceDescriptorsDB.length === 0) return null;
+    function findBestMatch(descriptor, threshold = 0.6) {
+        if(faceDescriptorsDB.length === 0) {
+            updateDebug(attendanceDebugDiv, "لا يوجد وجوه مسجلة في قاعدة البيانات");
+            return null;
+        }
+        
         let bestMatch = null;
         let bestDistance = Infinity;
+        
         for(const person of faceDescriptorsDB) {
             const distance = faceapi.euclideanDistance(descriptor, person.descriptor);
             if(distance < bestDistance) {
@@ -410,22 +444,33 @@
                 bestMatch = person;
             }
         }
-        if(bestDistance <= threshold) return bestMatch;
+        
+        updateDebug(attendanceDebugDiv, `أفضل تطابق: ${bestMatch?.name} (المسافة: ${bestDistance.toFixed(3)})`);
+        
+        if(bestDistance <= threshold) {
+            return bestMatch;
+        }
         return null;
     }
     
-    // Start camera streams
+    // ==================== CAMERA SETUP ====================
     async function startCameraForAttendance() {
         if(attendanceStream) {
             attendanceStream.getTracks().forEach(t => t.stop());
         }
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } 
+            });
             attendanceStream = stream;
             attendanceVideo.srcObject = stream;
             await attendanceVideo.play();
+            updateDebug(attendanceDebugDiv, "📷 تم تشغيل الكاميرا");
+            return true;
         } catch(err) {
-            attendanceStatusDiv.innerText = "❌ Camera access denied.";
+            updateStatus(attendanceStatusDiv, "❌ لا يمكن الوصول للكاميرا", "error");
+            updateDebug(attendanceDebugDiv, `خطأ في الكاميرا: ${err.message}`, true);
+            return false;
         }
     }
     
@@ -434,155 +479,231 @@
             registerStream.getTracks().forEach(t => t.stop());
         }
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } 
+            });
             registerStream = stream;
             registerVideo.srcObject = stream;
             await registerVideo.play();
+            updateDebug(registerDebugDiv, "📷 تم تشغيل الكاميرا");
+            return true;
         } catch(err) {
-            registerStatusDiv.innerText = "❌ Camera error.";
+            updateStatus(registerStatusDiv, "❌ لا يمكن الوصول للكاميرا", "error");
+            updateDebug(registerDebugDiv, `خطأ في الكاميرا: ${err.message}`, true);
+            return false;
         }
     }
     
-    // Draw boxes on canvas (optional)
-    async function drawDetection(videoElem, canvasElem) {
-        const displaySize = { width: videoElem.videoWidth, height: videoElem.videoHeight };
-        faceapi.matchDimensions(canvasElem, displaySize);
-        const detections = await faceapi.detectAllFaces(videoElem).withFaceLandmarks();
-        const resized = faceapi.resizeResults(detections, displaySize);
-        canvasElem.getContext('2d').clearRect(0,0, canvasElem.width, canvasElem.height);
-        faceapi.draw.drawDetections(canvasElem, resized);
-    }
-    
-    // Attendance action
+    // ==================== ATTENDANCE ACTION ====================
     async function takeAttendance() {
+        if(isProcessing) {
+            updateStatus(attendanceStatusDiv, "⏳ جاري المعالجة... انتظر قليلاً", "warning");
+            return;
+        }
+        
         if(!modelsLoaded) {
-            attendanceStatusDiv.innerText = "⏳ Models still loading, please wait...";
+            updateStatus(attendanceStatusDiv, "⏳ جاري تحميل النماذج...", "info");
             await loadModels();
+            if(!modelsLoaded) return;
         }
+        
         if(!attendanceVideo.videoWidth) {
-            attendanceStatusDiv.innerText = "📷 Waiting for camera...";
+            updateStatus(attendanceStatusDiv, "📷 جاري تشغيل الكاميرا...", "info");
+            await startCameraForAttendance();
+            setTimeout(() => takeAttendance(), 1000);
             return;
         }
-        attendanceStatusDiv.innerText = "🔎 Detecting face...";
-        const descriptor = await getFaceDescriptorFromVideo(attendanceVideo);
-        if(!descriptor) {
-            attendanceStatusDiv.innerText = "😞 No face detected. Ensure good lighting and look at camera.";
-            return;
+        
+        isProcessing = true;
+        captureAttendanceBtn.disabled = true;
+        updateStatus(attendanceStatusDiv, "🔍 جاري اكتشاف الوجه...", "info");
+        
+        try {
+            await new Promise(r => setTimeout(r, 300));
+            const descriptor = await getFaceDescriptorFromVideo(attendanceVideo);
+            
+            if(!descriptor) {
+                updateStatus(attendanceStatusDiv, "😞 لم يتم اكتشاف وجه. تأكد من الإضاءة وانظر للكاميرا", "error");
+                isProcessing = false;
+                captureAttendanceBtn.disabled = false;
+                return;
+            }
+            
+            updateStatus(attendanceStatusDiv, "🧠 جاري مطابقة الوجه...", "info");
+            await new Promise(r => setTimeout(r, 300));
+            
+            const match = findBestMatch(descriptor, 0.6);
+            
+            if(!match) {
+                updateStatus(attendanceStatusDiv, "❌ وجه غير مسجل. يرجى التسجيل أولاً", "error");
+                isProcessing = false;
+                captureAttendanceBtn.disabled = false;
+                return;
+            }
+            
+            updateStatus(attendanceStatusDiv, `✅ تم التعرف: ${match.name}`, "success");
+            
+            const result = await markAttendanceInSheet(match.name);
+            const todayStr = getLocalDate();
+            
+            if(result && result.success) {
+                if(result.alreadyMarked) {
+                    updateStatus(attendanceStatusDiv, `⚠️ ${match.name} مسجل مسبقاً اليوم`, "warning");
+                } else {
+                    updateStatus(attendanceStatusDiv, `✅ تم تسجيل حضور ${match.name}`, "success");
+                }
+                
+                // Append to result area (not replace)
+                attendanceResultDiv.innerHTML += `
+                    <div class="attendance-item">
+                        <span>⛪ ${match.name}</span>
+                        <span class="badge">${todayStr}</span>
+                    </div>
+                `;
+            } else {
+                updateStatus(attendanceStatusDiv, `⚠️ فشل تسجيل الحضور لـ ${match.name}`, "error");
+            }
+            
+        } catch(error) {
+            console.error("Attendance error:", error);
+            updateStatus(attendanceStatusDiv, `❌ خطأ: ${error.message}`, "error");
+            updateDebug(attendanceDebugDiv, `خطأ: ${error.message}`, true);
+        } finally {
+            isProcessing = false;
+            captureAttendanceBtn.disabled = false;
         }
-        const match = findBestMatch(descriptor, 0.55);
-        if(!match) {
-            attendanceStatusDiv.innerText = "❌ Unknown face. Please register first in 'Register New Face' mode.";
-            return;
-        }
-        // Mark attendance
-        const success = await markAttendanceInSheet(match.name);
-        if(success) {
-            attendanceStatusDiv.innerText = `✅ Attendance marked for ${match.name}`;
-            // Show today's attendance preview
-            const todayStr = new Date().toISOString().slice(0,10);
-            attendanceResultDiv.innerHTML = `<div class="attendance-item"><span>⛪ ${match.name}</span><span class="badge">${todayStr}</span></div>`;
-        } else {
-            attendanceStatusDiv.innerText = `⚠️ Could not mark attendance for ${match.name}. Check connection.`;
-        }
-        // Optional: draw face box on canvas
-        await drawDetection(attendanceVideo, attendanceCanvas);
     }
     
-    // Register new face
+    // ==================== REGISTRATION ACTION ====================
     async function registerFace() {
+        if(isProcessing) return;
+        
         const name = newUserNameInput.value.trim();
         if(!name) {
-            registerStatusDiv.innerText = "⚠️ Please enter full name (exactly as in Sheet1).";
+            updateStatus(registerStatusDiv, "⚠️ الرجاء إدخال الاسم بالكامل", "error");
             return;
         }
-        // verify name exists in membersList (optional but recommended)
-        const memberExists = membersList.some(m => m.name === name);
-        if(!memberExists && membersList.length > 0) {
-            registerStatusDiv.innerText = `⚠️ Name "${name}" not found in servant list. Check Sheet1 or add manually.`;
-            return;
-        }
+        
         if(!modelsLoaded) {
-            registerStatusDiv.innerText = "⏳ Loading models...";
+            updateStatus(registerStatusDiv, "⏳ جاري تحميل النماذج...", "info");
             await loadModels();
+            if(!modelsLoaded) return;
         }
+        
         if(!registerVideo.videoWidth) {
-            registerStatusDiv.innerText = "📷 Camera not ready.";
+            updateStatus(registerStatusDiv, "📷 جاري تشغيل الكاميرا...", "info");
+            await startCameraForRegister();
+            setTimeout(() => registerFace(), 1000);
             return;
         }
-        registerStatusDiv.innerText = "📸 Capturing face... Look at camera.";
-        const descriptor = await getFaceDescriptorFromVideo(registerVideo);
-        if(!descriptor) {
-            registerStatusDiv.innerText = "😞 No face detected. Position your face clearly.";
-            return;
-        }
-        const saved = await saveFaceDescriptor(name, descriptor);
-        if(saved) {
-            registerStatusDiv.innerText = `✅ Face registered for ${name}. Now you can take attendance.`;
-            newUserNameInput.value = '';
-            // draw detection feedback
-            await drawDetection(registerVideo, registerCanvas);
-        } else {
-            registerStatusDiv.innerText = "❌ Failed to save face. Check network/script.";
+        
+        isProcessing = true;
+        captureRegisterBtn.disabled = true;
+        updateStatus(registerStatusDiv, "📸 جاري التقاط الوجه...", "info");
+        
+        try {
+            await new Promise(r => setTimeout(r, 500));
+            const descriptor = await getFaceDescriptorFromVideo(registerVideo);
+            
+            if(!descriptor) {
+                updateStatus(registerStatusDiv, "😞 لم يتم اكتشاف وجه. حاول مرة أخرى", "error");
+                isProcessing = false;
+                captureRegisterBtn.disabled = false;
+                return;
+            }
+            
+            updateStatus(registerStatusDiv, "💾 جاري حفظ الوجه...", "info");
+            const result = await saveFaceToSheet(name, descriptor);
+            
+            if(result && result.success) {
+                updateStatus(registerStatusDiv, `✅ تم تسجيل الوجه لـ ${name} بنجاح!`, "success");
+                updateDebug(registerDebugDiv, `✅ تم تسجيل ${name}`);
+                newUserNameInput.value = '';
+                
+                // Update local database
+                const newDesc = { name, descriptor: new Float32Array(descriptor) };
+                const idx = faceDescriptorsDB.findIndex(f => f.name === name);
+                if(idx !== -1) faceDescriptorsDB[idx] = newDesc;
+                else faceDescriptorsDB.push(newDesc);
+            } else {
+                updateStatus(registerStatusDiv, `❌ فشل تسجيل الوجه: ${result?.error || 'خطأ غير معروف'}`, "error");
+            }
+            
+        } catch(error) {
+            console.error("Registration error:", error);
+            updateStatus(registerStatusDiv, `❌ خطأ: ${error.message}`, "error");
+            updateDebug(registerDebugDiv, `خطأ: ${error.message}`, true);
+        } finally {
+            isProcessing = false;
+            captureRegisterBtn.disabled = false;
         }
     }
     
-    // Switch between modes
-    function setMode(mode) {
-        currentMode = mode;
+    // ==================== MODE SWITCHING ====================
+    async function setMode(mode) {
         if(mode === "attendance") {
             attendancePanelDiv.classList.add("active-panel");
             registerPanelDiv.classList.remove("active-panel");
             takeAttendanceBtn.classList.add("active");
             registerFaceBtn.classList.remove("active");
+            
             if(registerStream) {
                 registerStream.getTracks().forEach(t => t.stop());
                 registerStream = null;
             }
-            startCameraForAttendance();
+            await startCameraForAttendance();
         } else {
             attendancePanelDiv.classList.remove("active-panel");
             registerPanelDiv.classList.add("active-panel");
             registerFaceBtn.classList.add("active");
             takeAttendanceBtn.classList.remove("active");
+            
             if(attendanceStream) {
                 attendanceStream.getTracks().forEach(t => t.stop());
                 attendanceStream = null;
             }
-            startCameraForRegister();
+            await startCameraForRegister();
         }
     }
     
-    // Initialize UI & load data
+    // ==================== INITIALIZATION ====================
     async function init() {
         attendanceVideo = document.getElementById('attendanceVideo');
         attendanceCanvas = document.getElementById('attendanceCanvas');
         registerVideo = document.getElementById('registerVideo');
         registerCanvas = document.getElementById('registerCanvas');
         
+        // Set canvas dimensions
+        function setupCanvas() {
+            const wrapper = document.querySelector('.video-wrapper');
+            if(wrapper && wrapper.children[0]) {
+                const rect = wrapper.getBoundingClientRect();
+                attendanceCanvas.width = rect.width;
+                attendanceCanvas.height = rect.height;
+                registerCanvas.width = rect.width;
+                registerCanvas.height = rect.height;
+            }
+        }
+        setTimeout(setupCanvas, 100);
+        window.addEventListener('resize', setupCanvas);
+        
+        updateDebug(attendanceDebugDiv, "🚀 جاري تشغيل التطبيق...");
+        updateDebug(registerDebugDiv, "🚀 جاري تشغيل التطبيق...");
+        
         await loadMembers();
         await loadFaceDescriptors();
         await loadModels();
-        
-        // start default camera
         await startCameraForAttendance();
-        
-        // set intervals to redraw canvas for video feedback
-        setInterval(async () => {
-            if(currentMode === "attendance" && attendanceVideo.videoWidth) {
-                await drawDetection(attendanceVideo, attendanceCanvas);
-            } else if(currentMode === "register" && registerVideo.videoWidth) {
-                await drawDetection(registerVideo, registerCanvas);
-            }
-        }, 800);
         
         // Button listeners
         captureAttendanceBtn.addEventListener('click', takeAttendance);
         captureRegisterBtn.addEventListener('click', registerFace);
         takeAttendanceBtn.addEventListener('click', () => setMode("attendance"));
         registerFaceBtn.addEventListener('click', () => setMode("register"));
+        
+        updateDebug(attendanceDebugDiv, "✅ التطبيق جاهز للعمل!");
     }
     
-    // handle visibility and cleanup
     window.addEventListener('beforeunload', () => {
         if(attendanceStream) attendanceStream.getTracks().forEach(t => t.stop());
         if(registerStream) registerStream.getTracks().forEach(t => t.stop());
