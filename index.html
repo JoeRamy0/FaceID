@@ -6,7 +6,7 @@
     <title>St. Joseph Attendance Pro - Face Recognition</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <!-- Face API Libraries -->
+    <!-- Face API Libraries with proper CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     
@@ -115,11 +115,6 @@
             font-size: 14px;
         }
 
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
         .login-btn {
             width: 100%;
             padding: 14px;
@@ -160,7 +155,6 @@
             margin-top: 5px;
         }
 
-        /* User Profile */
         .user-profile {
             background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
             border-radius: 20px;
@@ -170,7 +164,6 @@
             display: flex;
             align-items: center;
             gap: 15px;
-            position: relative;
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
         }
 
@@ -224,15 +217,12 @@
             font-size: 12px;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.2s;
         }
 
         .logout-btn-side:hover {
             background: #c0392b;
-            transform: translateY(-2px);
         }
 
-        /* Sheet Selector */
         .sheet-selector {
             background: #f8fafc;
             border-radius: 20px;
@@ -370,11 +360,6 @@
             width: 100%;
         }
 
-        .btn-small:hover {
-            background: #1f5e7a;
-        }
-
-        /* Mode Toggle Buttons */
         .mode-buttons {
             display: flex;
             gap: 12px;
@@ -408,78 +393,6 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
 
-        /* Video Container for Face Recognition */
-        .video-container {
-            position: relative;
-            width: 100%;
-            border-radius: 16px;
-            overflow: hidden;
-            margin: 15px 0;
-            background: #000;
-            display: none;
-        }
-
-        #video {
-            width: 100%;
-            height: auto;
-            transform: scaleX(-1);
-        }
-
-        .canvas-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
-
-        .face-status {
-            background: #f1f5f9;
-            padding: 12px;
-            border-radius: 12px;
-            text-align: center;
-            font-size: 13px;
-            margin: 10px 0;
-            display: none;
-        }
-
-        .register-section {
-            background: #f8fafc;
-            border-radius: 16px;
-            padding: 15px;
-            margin: 15px 0;
-            border: 1px solid #eef2f6;
-        }
-
-        .register-section h4 {
-            margin-bottom: 10px;
-            color: #1e293b;
-        }
-
-        .register-input {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-
-        .register-input input {
-            flex: 1;
-            padding: 10px;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            font-size: 14px;
-        }
-
-        .register-input button {
-            padding: 10px 20px;
-            background: #27ae60;
-            color: white;
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-        }
-
-        /* Welcome Buttons */
         .welcome-buttons {
             display: flex;
             gap: 12px;
@@ -524,7 +437,25 @@
             cursor: not-allowed;
         }
 
-        /* Main App Styles */
+        .info-cards {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .info-card {
+            background: #f8fafc;
+            padding: 12px;
+            border-radius: 16px;
+            text-align: center;
+            border: 1px solid #eef2f6;
+        }
+
+        .info-icon { font-size: 24px; }
+        .info-title { font-size: 12px; font-weight: 600; margin-top: 5px; }
+        .info-desc { font-size: 10px; color: #64748b; }
+
         #mainApp .card-header, #absenceView .card-header {
             background: linear-gradient(135deg, #2c7da0 0%, #1f5e7a 100%);
             color: white;
@@ -643,11 +574,6 @@
             background: white;
         }
 
-        select:disabled {
-            background: #f1f5f9;
-            cursor: not-allowed;
-        }
-
         .logs-container {
             background: #f8fafc;
             border-radius: 16px;
@@ -715,6 +641,76 @@
             display: none;
         }
 
+        .video-container {
+            position: relative;
+            width: 100%;
+            border-radius: 16px;
+            overflow: hidden;
+            margin: 15px 0;
+            background: #000;
+            display: none;
+        }
+
+        #video {
+            width: 100%;
+            height: auto;
+            transform: scaleX(-1);
+        }
+
+        .canvas-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .face-status {
+            background: #f1f5f9;
+            padding: 12px;
+            border-radius: 12px;
+            text-align: center;
+            font-size: 13px;
+            margin: 10px 0;
+            display: none;
+        }
+
+        .register-section {
+            background: #f8fafc;
+            border-radius: 16px;
+            padding: 15px;
+            margin: 15px 0;
+            border: 1px solid #eef2f6;
+        }
+
+        .register-section h4 {
+            margin-bottom: 10px;
+            color: #1e293b;
+        }
+
+        .register-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .register-input input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 14px;
+        }
+
+        .register-input button {
+            padding: 10px 20px;
+            background: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+        }
+
         .upload-section {
             border: 2px dashed #e2e8f0;
             border-radius: 16px;
@@ -761,7 +757,7 @@
         <div class="card" id="loginView">
             <div class="card-header">
                 <div class="app-title">⛪ St. Joseph Attendance Pro</div>
-                <div class="app-subtitle">Smart Attendance Management System</div>
+                <div class="app-subtitle">Smart Attendance with Face Recognition</div>
                 <div class="creator-credit">Created by: Youssef Ramy</div>
             </div>
             <div class="login-form">
@@ -797,7 +793,7 @@
 
                 <div class="sheet-selector">
                     <div class="sheet-selector-header">
-                        <span class="sheet-selector-title">📊 Available Sheets</span>
+                        <span class="sheet-selector-title">📊 Attendance Sheets</span>
                         <button class="add-sheet-btn" onclick="toggleAddSheetForm()">+ Add Sheet</button>
                     </div>
                     <div id="currentSheetDisplay" class="current-sheet"></div>
@@ -805,20 +801,23 @@
                     
                     <div id="addSheetForm" class="add-sheet-form hidden">
                         <div class="form-group-small">
-                            <input type="text" id="newSheetName" placeholder="Sheet Name (e.g., Sunday School)">
+                            <input type="text" id="newSheetName" placeholder="Sheet Name">
                         </div>
                         <div class="form-group-small">
-                            <input type="text" id="newSheetUrl" placeholder="Google Apps Script URL">
+                            <input type="text" id="newSheetUrl" placeholder="AppScript URL">
                         </div>
                         <div class="form-group-small">
                             <input type="text" id="newSheetId" placeholder="Google Sheet ID">
                         </div>
                         <div class="form-group-small">
-                            <input type="text" id="newSheetGroups" placeholder="Group Names (comma separated)">
+                            <input type="text" id="newSheetFaceId" placeholder="Face Data Sheet ID (optional)">
+                        </div>
+                        <div class="form-group-small">
+                            <input type="text" id="newSheetGroups" placeholder="Groups (comma separated)">
                         </div>
                         <div class="form-group-small">
                             <select id="newSheetAccess">
-                                <option value="full">Full Access (Read/Write)</option>
+                                <option value="full">Full Access</option>
                                 <option value="readonly">Read Only</option>
                             </select>
                         </div>
@@ -847,11 +846,10 @@
         <div class="card hidden" id="mainApp">
             <div class="card-header">
                 <h2 id="modeTitle">Scanner Mode</h2>
-                <p id="modeDescription">Scan QR code to mark attendance</p>
+                <p id="modeDescription">Scan QR code or use Face ID</p>
                 <div id="activeSheetInfo" style="font-size: 11px; margin-top: 5px;"></div>
             </div>
             <div class="card-body">
-                <!-- Mode Toggle -->
                 <div class="mode-buttons">
                     <button class="mode-btn qr active" id="qrModeBtn" onclick="switchToQRMode()">📱 QR Mode</button>
                     <button class="mode-btn face" id="faceModeBtn" onclick="switchToFaceMode()">👤 Face ID Mode</button>
@@ -870,21 +868,23 @@
                     <select id="dateSelect" onchange="onDateManuallySelected()"></select>
                 </div>
 
-                <!-- QR Scanner Section -->
+                <!-- QR Section -->
                 <div id="qrSection">
                     <div id="reader"></div>
                     <div class="scanner-status" id="scannerStatus"><span>📷 Ready to scan</span></div>
                 </div>
 
-                <!-- Face Recognition Section -->
+                <!-- Face Section -->
                 <div id="faceSection" style="display: none;">
                     <div class="video-container" id="videoContainer">
                         <video id="video" autoplay muted playsinline></video>
                         <canvas id="overlayCanvas" class="canvas-overlay"></canvas>
                     </div>
-                    <div class="face-status" id="faceStatus"><span>👤 Loading face detection models...</span></div>
+                    <div class="face-status" id="faceStatus">
+                        <span>👤 Loading face models...</span>
+                        <div class="loading-progress" id="modelProgress"></div>
+                    </div>
                     
-                    <!-- Face Registration Section -->
                     <div class="register-section">
                         <h4>📝 Register New Face</h4>
                         <div class="register-input">
@@ -897,16 +897,16 @@
 
                 <div id="fileSection" class="hidden">
                     <div class="upload-section">
-                        <label class="file-input-label">📁 Choose File (.txt or .csv)<input type="file" id="fileInput" accept=".txt,.csv"></label>
-                        <div id="fileName" style="margin-top: 10px; font-size: 12px;">No file selected</div>
+                        <label class="file-input-label">📁 Choose File<input type="file" id="fileInput" accept=".txt,.csv"></label>
+                        <div id="fileName" style="margin-top: 10px;">No file selected</div>
                         <div class="progress-container" id="progressContainer"><div class="progress-bar" id="progressBar"></div></div>
-                        <button class="btn btn-primary" id="uploadBtn" onclick="handleBulkUpload()" style="margin-top: 10px;">🚀 Start Upload</button>
-                        <div id="uploadStats" style="font-size: 11px; margin-top: 8px;"></div>
+                        <button class="btn btn-primary" id="uploadBtn" onclick="handleBulkUpload()">🚀 Start Upload</button>
+                        <div id="uploadStats" style="font-size: 11px;"></div>
                     </div>
                 </div>
 
                 <div class="logs-container">
-                    <div class="logs-header"><span>📋 Activity Log</span><button onclick="clearLogs()" style="background:none; border:none; cursor:pointer;">Clear</button></div>
+                    <div class="logs-header"><span>📋 Activity Log</span><button onclick="clearLogs()" style="background:none; border:none;">Clear</button></div>
                     <div id="logsList"><div class="log-entry"><span>⏳</span><span>Ready to start</span></div></div>
                 </div>
 
@@ -914,21 +914,21 @@
                     <button class="btn btn-primary" onclick="exportToExcel()">📊 Export Excel</button>
                     <button class="btn btn-secondary" onclick="backToWelcome()">🏠 Back</button>
                 </div>
-                <button id="syncBtn" class="btn btn-primary hidden" onclick="syncQueue()" style="margin-top: 10px;">📤 Sync Queue (<span id="queueCount">0</span>)</button>
+                <button id="syncBtn" class="btn btn-primary hidden" onclick="syncQueue()">📤 Sync Queue (<span id="queueCount">0</span>)</button>
             </div>
         </div>
 
         <!-- Absence View -->
         <div class="card hidden" id="absenceView">
-            <div class="card-header"><h2>📋 Absence Report</h2><p>View absence list by group</p><div id="absenceSheetInfo" style="font-size: 11px; margin-top: 5px;"></div></div>
+            <div class="card-header"><h2>📋 Absence Report</h2><p>View absence list by group</p><div id="absenceSheetInfo"></div></div>
             <div class="card-body">
                 <div class="date-section">
                     <label>Select Date:</label>
-                    <select id="absenceDateSelect" onchange="loadAbsenceData()" style="margin-top: 10px;"></select>
+                    <select id="absenceDateSelect" onchange="loadAbsenceData()"></select>
                 </div>
                 <div id="absenceLoading" style="display:none; text-align:center; padding:20px;">⏳ Loading...</div>
                 <div id="absenceGroupsContainer"></div>
-                <div class="button-group" style="margin-top: 15px;">
+                <div class="button-group">
                     <button class="btn btn-primary" id="exportAbsenceBtn" onclick="exportAbsenceToExcel()" style="display:none;">📥 Export Absence</button>
                     <button class="btn btn-secondary" onclick="backToWelcome()">🏠 Back</button>
                 </div>
@@ -937,32 +937,28 @@
     </div>
 
     <script>
-        // ============ STORAGE KEYS ============
-        const STORAGE_SHEETS_KEY = 'attendance_universal_sheets';
+        // Storage Keys
+        const STORAGE_SHEETS_KEY = 'attendance_sheets_v2';
         const STORAGE_USER_KEY = 'attendance_user';
         
-        // ============ DEFAULT SHEETS ============
+        // Default Sheets - Configure your sheets here
         const DEFAULT_SHEETS = [
             {
                 name: "Attendance Sheet",
                 url: "https://script.google.com/macros/s/AKfycbwAxnQgxbxPrG-75bKT_mqHLalPYY2fueedzKgeJSDq2Ekh0viLd8PtkV_m1cBs7bIFSg/exec",
                 sheetId: "1eLBj6T5M8toC9nBgZt70elYYrRjWYkdWzTkeKx-k5zA",
+                faceSheetId: "1eLBj6T5M8toC9nBgZt70elYYrRjWYkdWzTkeKx-k5zA", // Separate sheet for face data
                 groups: ["خدام", "تالتة بنين", "رابعة بنين", "تالتة بنات", "رابعة بنات"],
                 access: "full"
             }
         ];
         
-        // ============ USERS ============
+        // Users
         const USERS = [
-            {
-                username: "admin",
-                email: "admin@church.com",
-                role: "Admin",
-                sheets: null
-            }
+            { username: "admin", email: "admin@church.com", role: "Admin", sheets: null }
         ];
         
-        // ============ GLOBAL STATE ============
+        // Global State
         let allSheets = [];
         let currentUser = null;
         let currentSheet = null;
@@ -976,7 +972,6 @@
         let videoStream = null;
         let detectionInterval = null;
         let isFaceMode = false;
-        let currentMode = 'qr'; // 'qr' or 'face'
         
         let appState = {
             scanner: null,
@@ -991,7 +986,7 @@
         
         let absenceData = null;
         
-        // ============ INITIALIZATION ============
+        // ============ SHEET MANAGEMENT ============
         function loadSheets() {
             const stored = localStorage.getItem(STORAGE_SHEETS_KEY);
             if (stored) {
@@ -1044,7 +1039,7 @@
                 <div class="sheet-item ${currentSheet && currentSheet.sheetId === sheet.sheetId ? 'active' : ''}" onclick="selectSheet(${index})">
                     <div class="sheet-info">
                         <div class="sheet-name">${escapeHtml(sheet.name)}</div>
-                        <div class="sheet-details">${sheet.groups.length} groups | ${sheet.sheetId.substring(0, 15)}...</div>
+                        <div class="sheet-details">${sheet.groups.length} groups | Face: ${sheet.faceSheetId ? '✓' : '✗'}</div>
                     </div>
                     <div class="sheet-actions">
                         <div class="access-badge ${sheet.access}">${sheet.access === 'full' ? 'Full' : 'View'}</div>
@@ -1065,13 +1060,7 @@
             if (!document.getElementById('mainApp').classList.contains('hidden')) {
                 loadDates();
                 loadGroupStats();
-                if (isFaceMode) {
-                    loadKnownFaces();
-                }
-            }
-            if (!document.getElementById('absenceView').classList.contains('hidden')) {
-                loadAbsenceDates();
-                loadAbsenceData();
+                if (isFaceMode) loadKnownFaces();
             }
         }
         
@@ -1079,11 +1068,12 @@
             const name = document.getElementById('newSheetName').value.trim();
             const url = document.getElementById('newSheetUrl').value.trim();
             const sheetId = document.getElementById('newSheetId').value.trim();
+            const faceSheetId = document.getElementById('newSheetFaceId').value.trim();
             const groupsStr = document.getElementById('newSheetGroups').value.trim();
             const access = document.getElementById('newSheetAccess').value;
             
             if (!name || !url || !sheetId || !groupsStr) {
-                alert('Please fill all fields!');
+                alert('Please fill required fields!');
                 return;
             }
             
@@ -1093,6 +1083,7 @@
                 name: name,
                 url: url,
                 sheetId: sheetId,
+                faceSheetId: faceSheetId || null,
                 groups: groups,
                 access: access
             });
@@ -1103,26 +1094,24 @@
             document.getElementById('newSheetName').value = '';
             document.getElementById('newSheetUrl').value = '';
             document.getElementById('newSheetId').value = '';
+            document.getElementById('newSheetFaceId').value = '';
             document.getElementById('newSheetGroups').value = '';
             document.getElementById('addSheetForm').classList.add('hidden');
             
-            addLogToUI('System', `Added new sheet: ${name} with ${groups.length} groups`, '✅');
+            addLogToUI('System', `Added sheet: ${name}`, '✅');
         }
         
         function deleteSheet(index) {
             const userSheets = getUserSheets();
             if (userSheets.length === 1) {
-                alert('Cannot delete the only sheet you have access to!');
+                alert('Cannot delete the only sheet!');
                 return;
             }
             
             const sheetName = userSheets[index].name;
             const globalIndex = allSheets.findIndex(s => s.name === sheetName);
-            
-            if (globalIndex !== -1) {
-                allSheets.splice(globalIndex, 1);
-                saveSheets();
-            }
+            if (globalIndex !== -1) allSheets.splice(globalIndex, 1);
+            saveSheets();
             
             if (currentSheet && currentSheet.name === sheetName) {
                 const remaining = getUserSheets();
@@ -1136,7 +1125,7 @@
             }
             
             loadUserSheets();
-            addLogToUI('System', `Deleted sheet: ${sheetName}`, '🗑️');
+            addLogToUI('System', `Deleted: ${sheetName}`, '🗑️');
         }
         
         function toggleAddSheetForm() {
@@ -1149,6 +1138,7 @@
             return {
                 SCRIPT_URL: currentSheet.url,
                 SHEET_ID: currentSheet.sheetId,
+                FACE_SHEET_ID: currentSheet.faceSheetId || currentSheet.sheetId,
                 ACCESS: currentSheet.access,
                 GROUPS: currentSheet.groups
             };
@@ -1158,26 +1148,33 @@
             return currentAccess === 'full';
         }
         
-        // ============ FACE RECOGNITION FUNCTIONS ============
+        // ============ FACE RECOGNITION ============
         async function loadFaceModels() {
             const statusDiv = document.getElementById('faceStatus');
-            statusDiv.innerHTML = '<span>📥 Loading face detection models...</span>';
+            const progressDiv = document.getElementById('modelProgress');
             statusDiv.style.display = 'block';
+            statusDiv.innerHTML = '<span>📥 Loading face detection models...</span>';
+            progressDiv.innerHTML = 'This may take a few seconds on first load';
             
             try {
-                await faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/models');
-                await faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/models');
-                await faceapi.nets.faceRecognitionNet.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/models');
+                // Load models from CDN with error handling
+                await Promise.all([
+                    faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/models'),
+                    faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/models'),
+                    faceapi.nets.faceRecognitionNet.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/models')
+                ]);
                 
                 faceModelsLoaded = true;
                 statusDiv.innerHTML = '<span>✅ Face models loaded successfully!</span>';
+                progressDiv.innerHTML = '';
                 setTimeout(() => {
                     statusDiv.style.display = 'none';
                 }, 2000);
                 return true;
             } catch (error) {
                 console.error('Error loading face models:', error);
-                statusDiv.innerHTML = '<span>❌ Failed to load face models. Check your internet connection.</span>';
+                statusDiv.innerHTML = '<span>❌ Failed to load face models. Check internet connection.</span>';
+                progressDiv.innerHTML = 'Please refresh and try again.';
                 return false;
             }
         }
@@ -1186,13 +1183,15 @@
             const config = getCurrentConfig();
             if (!config) return;
             
+            const faceSheetId = config.FACE_SHEET_ID;
+            
             try {
-                const response = await fetch(`${config.SCRIPT_URL}?action=getAllMembers&sheetId=${config.SHEET_ID}`);
+                const response = await fetch(`${config.SCRIPT_URL}?action=getAllMembers&sheetId=${faceSheetId}`);
                 const members = await response.json();
                 
                 knownFaces = [];
                 for (const member of members) {
-                    if (member.descriptor) {
+                    if (member.descriptor && Array.isArray(member.descriptor)) {
                         knownFaces.push({
                             name: member.name,
                             descriptor: new Float32Array(member.descriptor)
@@ -1205,9 +1204,12 @@
                     const labels = knownFaces.map(f => f.name);
                     faceMatcher = new faceapi.FaceMatcher(descriptors, labels, 0.6);
                     addLogToUI('System', `Loaded ${knownFaces.length} registered faces`, '✅');
+                } else {
+                    addLogToUI('System', 'No registered faces found', '⚠️');
                 }
             } catch (error) {
-                console.error('Error loading known faces:', error);
+                console.error('Error loading faces:', error);
+                addLogToUI('System', 'Failed to load face data', '❌');
             }
         }
         
@@ -1224,40 +1226,58 @@
             const faceStatus = document.getElementById('faceStatus');
             
             try {
-                videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                videoStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } 
+                });
                 video.srcObject = videoStream;
-                await video.play();
+                
+                await new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        video.play();
+                        resolve();
+                    };
+                });
                 
                 videoContainer.style.display = 'block';
                 faceStatus.style.display = 'block';
                 faceStatus.innerHTML = '<span>👤 Face recognition active. Looking for faces...</span>';
                 
-                // Start detection interval
+                // Draw canvas for visualization
+                const canvas = document.getElementById('overlayCanvas');
+                const displaySize = { width: video.videoWidth, height: video.videoHeight };
+                faceapi.matchDimensions(canvas, displaySize);
+                
+                // Start detection loop
                 if (detectionInterval) clearInterval(detectionInterval);
                 detectionInterval = setInterval(async () => {
-                    if (!isFaceMode) return;
+                    if (!isFaceMode || !video.videoWidth) return;
                     
-                    const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                    const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
                         .withFaceLandmarks()
-                        .withFaceDescriptor();
+                        .withFaceDescriptors();
                     
-                    if (detection && faceMatcher && knownFaces.length > 0) {
-                        const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
+                    // Draw detections on canvas
+                    const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+                    faceapi.draw.drawDetections(canvas, resizedDetections);
+                    
+                    if (detections.length > 0 && faceMatcher && knownFaces.length > 0) {
+                        const bestMatch = faceMatcher.findBestMatch(detections[0].descriptor);
                         if (bestMatch.distance < 0.6) {
                             const recognizedName = bestMatch.label;
                             faceStatus.innerHTML = `<span>✅ Recognized: ${recognizedName}</span>`;
                             await processAttendance(recognizedName);
-                            // Pause detection for 3 seconds after successful recognition
+                            // Pause detection for 2 seconds after recognition
                             clearInterval(detectionInterval);
                             setTimeout(() => {
                                 if (isFaceMode) {
-                                    detectionInterval = setInterval(arguments.callee, 1000);
+                                    detectionInterval = setInterval(arguments.callee, 1500);
                                 }
-                            }, 3000);
+                            }, 2000);
                         } else {
-                            faceStatus.innerHTML = '<span>🔍 Face detected but not recognized</span>';
+                            faceStatus.innerHTML = `<span>🔍 Face detected: ${bestMatch.label} (${(bestMatch.distance * 100).toFixed(1)}% confidence)</span>`;
                         }
-                    } else if (detection) {
+                    } else if (detections.length > 0) {
                         faceStatus.innerHTML = '<span>🔍 Face detected - loading recognition data...</span>';
                     } else {
                         faceStatus.innerHTML = '<span>👤 Looking for a face...</span>';
@@ -1303,22 +1323,21 @@
                 }
                 
                 const descriptor = Array.from(detection.descriptor);
+                const faceSheetId = config.FACE_SHEET_ID;
                 
-                const response = await fetch(`${config.SCRIPT_URL}?action=registerFace&sheetId=${config.SHEET_ID}&name=${encodeURIComponent(name)}&descriptor=${JSON.stringify(descriptor)}`);
+                const response = await fetch(`${config.SCRIPT_URL}?action=registerFace&sheetId=${faceSheetId}&name=${encodeURIComponent(name)}&descriptor=${JSON.stringify(descriptor)}`);
                 const result = await response.text();
                 
                 if (result.includes('Success')) {
                     registerStatus.innerHTML = '✅ Face registered successfully!';
                     await loadKnownFaces();
-                    setTimeout(() => {
-                        registerStatus.innerHTML = '';
-                    }, 3000);
+                    setTimeout(() => registerStatus.innerHTML = '', 3000);
                 } else {
                     registerStatus.innerHTML = '❌ Registration failed: ' + result;
                 }
             } catch (error) {
                 console.error('Registration error:', error);
-                registerStatus.innerHTML = '❌ Error capturing face: ' + error.message;
+                registerStatus.innerHTML = '❌ Error: ' + error.message;
             }
         }
         
@@ -1371,7 +1390,6 @@
         
         function switchToQRMode() {
             isFaceMode = false;
-            currentMode = 'qr';
             document.getElementById('qrModeBtn').classList.add('active');
             document.getElementById('faceModeBtn').classList.remove('active');
             document.getElementById('qrSection').style.display = 'block';
@@ -1380,9 +1398,8 @@
             startScanner();
         }
         
-        function switchToFaceMode() {
+        async function switchToFaceMode() {
             isFaceMode = true;
-            currentMode = 'face';
             document.getElementById('faceModeBtn').classList.add('active');
             document.getElementById('qrModeBtn').classList.remove('active');
             document.getElementById('qrSection').style.display = 'none';
@@ -1393,7 +1410,7 @@
                 appState.scanner = null;
             }
             
-            startFaceRecognition();
+            await startFaceRecognition();
         }
         
         // ============ LOGIN FUNCTIONS ============
@@ -1412,17 +1429,12 @@
             
             if (!user) {
                 errorDiv.classList.remove('hidden');
-                errorDiv.innerHTML = '❌ Invalid credentials. Please check your username and email.';
+                errorDiv.innerHTML = '❌ Invalid credentials';
                 return;
             }
             
             currentUser = user;
-            
-            localStorage.setItem(STORAGE_USER_KEY, JSON.stringify({
-                username: user.username,
-                email: user.email,
-                role: user.role
-            }));
+            localStorage.setItem(STORAGE_USER_KEY, JSON.stringify({ username: user.username, email: user.email, role: user.role }));
             
             loadSheets();
             loadUserSheets();
@@ -1430,38 +1442,26 @@
             document.getElementById('loginView').classList.add('hidden');
             document.getElementById('welcomeView').classList.remove('hidden');
             
-            const avatar = document.getElementById('userAvatar');
-            if (avatar) {
-                avatar.innerHTML = user.username.charAt(0).toUpperCase();
-            }
+            document.getElementById('userAvatar').innerHTML = user.username.charAt(0).toUpperCase();
+            document.getElementById('displayName').innerHTML = user.username;
+            document.getElementById('displayEmail').innerHTML = user.email;
+            document.getElementById('displayRole').innerHTML = user.role;
             
-            document.getElementById('displayName').innerHTML = `${user.username}`;
-            document.getElementById('displayEmail').innerHTML = `${user.email}`;
-            document.getElementById('displayRole').innerHTML = `${user.role}`;
-            
-            addLogToUI('System', `Welcome ${user.username}! You have access to ${getUserSheets().length} sheet(s)`, '✅');
+            addLogToUI('System', `Welcome ${user.username}!`, '✅');
         }
         
         function logout() {
             currentUser = null;
             currentSheet = null;
-            currentAccess = null;
-            currentGroups = [];
             localStorage.removeItem(STORAGE_USER_KEY);
-            
-            if (appState.scanner) {
-                try { appState.scanner.stop(); } catch(e) {}
-                appState.scanner = null;
-            }
             stopFaceRecognition();
+            if (appState.scanner) try { appState.scanner.stop(); } catch(e) {}
             if (appState.syncInterval) clearInterval(appState.syncInterval);
             
             document.getElementById('welcomeView').classList.add('hidden');
             document.getElementById('mainApp').classList.add('hidden');
             document.getElementById('absenceView').classList.add('hidden');
             document.getElementById('loginView').classList.remove('hidden');
-            document.getElementById('username').value = '';
-            document.getElementById('email').value = '';
         }
         
         function checkSavedSession() {
@@ -1475,19 +1475,15 @@
                     loadUserSheets();
                     document.getElementById('loginView').classList.add('hidden');
                     document.getElementById('welcomeView').classList.remove('hidden');
-                    
-                    const avatar = document.getElementById('userAvatar');
-                    if (avatar) {
-                        avatar.innerHTML = user.username.charAt(0).toUpperCase();
-                    }
-                    document.getElementById('displayName').innerHTML = `${user.username}`;
-                    document.getElementById('displayEmail').innerHTML = `${user.email}`;
-                    document.getElementById('displayRole').innerHTML = `${user.role}`;
+                    document.getElementById('userAvatar').innerHTML = user.username.charAt(0).toUpperCase();
+                    document.getElementById('displayName').innerHTML = user.username;
+                    document.getElementById('displayEmail').innerHTML = user.email;
+                    document.getElementById('displayRole').innerHTML = user.role;
                 }
             }
         }
         
-        // ============ UI HELPER FUNCTIONS ============
+        // ============ UI HELPERS ============
         function addLogToUI(name, status, icon = '📌') {
             const container = document.getElementById('logsList');
             if (!container) return;
@@ -1515,6 +1511,11 @@
         function getTodayDateString() {
             const now = new Date();
             return `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear()}`;
+        }
+        
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
         }
         
         // ============ API FUNCTIONS ============
@@ -1615,16 +1616,15 @@
             }).join('');
         }
         
-        // ============ QR SCANNER FUNCTIONS ============
+        // ============ QR SCANNER ============
         async function startScanner() {
             if (!canWrite()) {
                 document.getElementById('scannerStatus').style.display = 'block';
-                document.getElementById('scannerStatus').innerHTML = '<span>🔒 Read-only mode. Cannot mark attendance.</span>';
+                document.getElementById('scannerStatus').innerHTML = '<span>🔒 Read-only mode</span>';
                 return;
             }
             
-            const readerDiv = document.getElementById('reader');
-            readerDiv.style.display = 'block';
+            document.getElementById('reader').style.display = 'block';
             document.getElementById('scannerStatus').style.display = 'block';
             
             try {
@@ -1632,15 +1632,12 @@
                 await appState.scanner.start(
                     { facingMode: "environment" },
                     { fps: 10, qrbox: { width: 250, height: 250 } },
-                    (decodedText) => {
-                        if (!appState.isProcessing) processQRScan(decodedText.trim());
-                    },
+                    (decodedText) => { if (!appState.isProcessing) processQRScan(decodedText.trim()); },
                     () => {}
                 );
                 document.getElementById('scannerStatus').innerHTML = '<span>📷 Ready - Point at QR code</span>';
             } catch(err) {
                 addLogToUI('System', 'Camera access failed', '❌');
-                document.getElementById('scannerStatus').innerHTML = '<span>❌ Camera access denied</span>';
             }
         }
         
@@ -1680,22 +1677,10 @@
                     return true;
                 } else if (text.includes("Already Marked")) {
                     addLogToUI(name, 'already', '⚠️');
-                    if (!isBatch) {
-                        document.getElementById('scannerStatus').innerHTML = `<span>⚠️ Already marked: ${escapeHtml(name)}</span>`;
-                        setTimeout(() => {
-                            document.getElementById('scannerStatus').innerHTML = '<span>📷 Ready - Point at QR code</span>';
-                        }, 1500);
-                    }
                     appState.isProcessing = false;
                     return false;
                 } else if (text.includes("not found")) {
                     addLogToUI(name, 'notfound', '🔍');
-                    if (!isBatch) {
-                        document.getElementById('scannerStatus').innerHTML = `<span>🔍 Name not found: ${escapeHtml(name)}</span>`;
-                        setTimeout(() => {
-                            document.getElementById('scannerStatus').innerHTML = '<span>📷 Ready - Point at QR code</span>';
-                        }, 1500);
-                    }
                     appState.isProcessing = false;
                     return false;
                 } else {
@@ -1708,12 +1693,6 @@
                 if (!isBatch && !appState.offlineQueue.includes(name)) appState.offlineQueue.push(name);
                 updateQueueUI();
                 appState.isProcessing = false;
-                if (!isBatch) {
-                    document.getElementById('scannerStatus').innerHTML = '<span>📱 Offline - Saved to queue</span>';
-                    setTimeout(() => {
-                        document.getElementById('scannerStatus').innerHTML = '<span>📷 Ready - Point at QR code</span>';
-                    }, 1500);
-                }
                 return false;
             }
         }
@@ -1721,11 +1700,8 @@
         function updateQueueUI() {
             document.getElementById('queueCount').innerText = appState.offlineQueue.length;
             const syncBtn = document.getElementById('syncBtn');
-            if (appState.offlineQueue.length > 0) {
-                syncBtn.classList.remove('hidden');
-            } else {
-                syncBtn.classList.add('hidden');
-            }
+            if (appState.offlineQueue.length > 0) syncBtn.classList.remove('hidden');
+            else syncBtn.classList.add('hidden');
         }
         
         async function syncQueue() {
@@ -1777,39 +1753,24 @@
         function startBackgroundSync() {
             if (appState.syncInterval) clearInterval(appState.syncInterval);
             appState.syncInterval = setInterval(() => {
-                if (appState.offlineQueue.length > 0 && navigator.onLine && appState.currentMode === 'scan') {
-                    syncQueue();
-                }
+                if (appState.offlineQueue.length > 0 && navigator.onLine && appState.currentMode === 'scan') syncQueue();
             }, 5000);
         }
         
         // ============ BULK UPLOAD ============
         async function handleBulkUpload() {
-            if (!canWrite()) {
-                alert('Read-only mode. Cannot upload.');
-                return;
-            }
-            
+            if (!canWrite()) { alert('Read-only mode'); return; }
             const config = getCurrentConfig();
-            if (!config) {
-                alert('Please select a sheet first!');
-                return;
-            }
+            if (!config) { alert('Select a sheet first!'); return; }
             
             const file = document.getElementById('fileInput').files[0];
-            if (!file) {
-                alert("Please select a file!");
-                return;
-            }
+            if (!file) { alert("Select a file!"); return; }
             
             try {
                 const text = await file.text();
                 let names = text.split(/\r?\n/).filter(l => l.trim().length > 0).map(n => n.split(',')[0].replace(/["']/g, '').trim()).filter(n => n.length > 0);
                 names = [...new Map(names.map(n => [n.toLowerCase(), n])).values()];
-                if (names.length === 0) {
-                    alert("No valid names found!");
-                    return;
-                }
+                if (names.length === 0) { alert("No valid names!"); return; }
                 
                 document.getElementById('progressContainer').style.display = 'block';
                 const uploadBtn = document.getElementById('uploadBtn');
@@ -1817,7 +1778,7 @@
                 
                 let processed = 0, successful = 0, alreadyMarked = 0, notFound = 0;
                 const startTime = Date.now();
-                addLogToUI('System', `Starting upload: ${names.length} names`, '📁');
+                addLogToUI('System', `Uploading ${names.length} names`, '📁');
                 
                 const currentDate = document.getElementById('dateSelect').value;
                 for (let i = 0; i < names.length; i += 50) {
@@ -1825,121 +1786,79 @@
                     try {
                         const response = await fetch(`${config.SCRIPT_URL}`, {
                             method: 'POST',
-                            body: JSON.stringify({
-                                action: 'batchMark',
-                                sheetId: config.SHEET_ID,
-                                names: batch,
-                                date: currentDate
-                            })
+                            body: JSON.stringify({ action: 'batchMark', sheetId: config.SHEET_ID, names: batch, date: currentDate })
                         });
                         const result = await response.json();
                         if (result.error) {
-                            batch.forEach(name => addLogToUI(name, 'error', '❌'));
                             notFound += batch.length;
                         } else {
-                            (result.success || []).forEach(name => {
-                                addLogToUI(name, 'success', '✅');
-                                successful++;
-                            });
-                            (result.alreadyMarked || []).forEach(name => {
-                                addLogToUI(name, 'already', '⚠️');
-                                alreadyMarked++;
-                            });
-                            (result.notFound || []).forEach(name => {
-                                addLogToUI(name, 'notfound', '🔍');
-                                notFound++;
-                            });
+                            successful += result.success?.length || 0;
+                            alreadyMarked += result.alreadyMarked?.length || 0;
+                            notFound += result.notFound?.length || 0;
                         }
-                    } catch(err) {
-                        batch.forEach(name => addLogToUI(name, 'error', '❌'));
-                        notFound += batch.length;
-                    }
+                    } catch(err) { notFound += batch.length; }
                     
                     processed += batch.length;
-                    const progress = (processed / names.length) * 100;
-                    document.getElementById('progressBar').style.width = `${progress}%`;
-                    
-                    const elapsed = (Date.now() - startTime) / 1000;
-                    const speed = (processed / elapsed).toFixed(1);
+                    document.getElementById('progressBar').style.width = `${(processed / names.length) * 100}%`;
+                    const speed = (processed / ((Date.now() - startTime) / 1000)).toFixed(1);
                     document.getElementById('uploadStats').innerHTML = `✓ ${successful} | ⚠️ ${alreadyMarked} | 🔍 ${notFound} | ⚡ ${speed}/s`;
                 }
                 
                 await loadGroupStats();
-                addLogToUI('System', `Completed: +${successful} new, ${alreadyMarked} already, ${notFound} not found`, '✅');
+                addLogToUI('System', `Completed: +${successful} new`, '✅');
                 uploadBtn.disabled = false;
-                
                 setTimeout(() => {
                     document.getElementById('progressContainer').style.display = 'none';
                     document.getElementById('progressBar').style.width = '0%';
-                    document.getElementById('uploadStats').innerHTML = '';
                 }, 3000);
             } catch(err) {
-                addLogToUI('System', 'Upload failed: ' + err.message, '❌');
+                addLogToUI('System', 'Upload failed', '❌');
                 document.getElementById('uploadBtn').disabled = false;
             }
         }
         
         function exportToExcel() {
-            if (appState.scannedData.length === 0) {
-                alert("No data to export! Please mark some attendance first.");
-                return;
-            }
-            
+            if (appState.scannedData.length === 0) { alert("No data to export!"); return; }
             const wsData = [['Name'], ...appState.scannedData.map(item => [item.Name])];
             const ws = XLSX.utils.aoa_to_sheet(wsData);
             ws['!cols'] = [{wch: 30}];
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Attendance");
-            const date = document.getElementById('dateSelect').value.replace(/\//g, '-');
-            XLSX.writeFile(wb, `Attendance_${date}.xlsx`);
+            XLSX.writeFile(wb, `Attendance_${document.getElementById('dateSelect').value.replace(/\//g, '-')}.xlsx`);
             addLogToUI('System', `Exported ${appState.scannedData.length} names`, '📊');
         }
         
         // ============ ABSENCE FUNCTIONS ============
         async function showAbsenceExport() {
             const config = getCurrentConfig();
-            if (!config) {
-                alert('Please select a sheet first!');
-                return;
-            }
-            
+            if (!config) { alert('Select a sheet first!'); return; }
             document.getElementById('welcomeView').classList.add('hidden');
             document.getElementById('mainApp').classList.add('hidden');
             document.getElementById('absenceView').classList.remove('hidden');
-            document.getElementById('absenceSheetInfo').innerHTML = `📄 ${currentSheet.name} (${currentGroups.length} groups)`;
             await loadAbsenceDates();
         }
         
         async function loadAbsenceDates() {
             const config = getCurrentConfig();
             if (!config) return;
-            
             try {
                 const response = await fetchWithRetry(`${config.SCRIPT_URL}?action=getDates&sheetId=${config.SHEET_ID}`);
                 const dates = await response.json();
                 const select = document.getElementById('absenceDateSelect');
                 select.innerHTML = dates.map(d => `<option value="${escapeHtml(d)}">📅 ${escapeHtml(d)}</option>`).join('');
-                
                 const todayStr = getTodayDateString();
                 for (let i = 0; i < select.options.length; i++) {
-                    if (select.options[i].value === todayStr) {
-                        select.selectedIndex = i;
-                        break;
-                    }
+                    if (select.options[i].value === todayStr) { select.selectedIndex = i; break; }
                 }
                 await loadAbsenceData();
-            } catch(e) {
-                addLogToUI('System', 'Failed to load absence dates', '❌');
-            }
+            } catch(e) { addLogToUI('System', 'Failed to load dates', '❌'); }
         }
         
         async function loadAbsenceData() {
             const config = getCurrentConfig();
             if (!config) return;
-            
             const date = document.getElementById('absenceDateSelect').value;
             if (!date) return;
-            
             document.getElementById('absenceLoading').style.display = 'block';
             document.getElementById('absenceGroupsContainer').innerHTML = '';
             document.getElementById('exportAbsenceBtn').style.display = 'none';
@@ -1947,14 +1866,12 @@
             try {
                 const response = await fetchWithRetry(`${config.SCRIPT_URL}?action=getAllAttendance&sheetId=${config.SHEET_ID}&date=${encodeURIComponent(date)}`);
                 const data = await response.json();
-                
                 if (data.error) throw new Error(data.error);
-                
                 absenceData = data;
                 renderAbsenceGroups(data);
                 document.getElementById('exportAbsenceBtn').style.display = 'block';
             } catch(e) {
-                document.getElementById('absenceGroupsContainer').innerHTML = `<div style="text-align:center;color:red;">Error: ${e.message}</div>`;
+                document.getElementById('absenceGroupsContainer').innerHTML = `<div style="color:red;">Error: ${e.message}</div>`;
             } finally {
                 document.getElementById('absenceLoading').style.display = 'none';
             }
@@ -1963,58 +1880,27 @@
         function renderAbsenceGroups(data) {
             const container = document.getElementById('absenceGroupsContainer');
             if (!container) return;
-            
             container.innerHTML = currentGroups.map(groupName => {
                 const group = data.groups[groupName];
                 if (!group) return '';
-                
-                const percentage = group.percentage || 0;
-                const absentList = group.absentNames.map(name => 
-                    `<div style="padding: 8px 12px; background: #fee2e2; margin: 4px 0; border-radius: 8px;">❌ ${escapeHtml(name)}</div>`
-                ).join('');
-                
-                return `
-                    <div class="group-card" style="margin-bottom: 15px;">
-                        <div class="group-title">
-                            <span>${groupName}</span>
-                            <span>${percentage}%</span>
-                        </div>
-                        <div class="group-stats">
-                            <div><div class="stat-number">${group.total}</div><div class="stat-label">Total</div></div>
-                            <div><div class="stat-number present">${group.present}</div><div class="stat-label">Present</div></div>
-                            <div><div class="stat-number absent">${group.absent}</div><div class="stat-label">Absent</div></div>
-                        </div>
-                        <div class="progress-bar"><div class="progress-fill" style="width: ${percentage}%"></div></div>
-                        ${group.absent > 0 ? `<div style="margin-top: 12px;"><strong>📋 Absent List (${group.absent}):</strong><div style="margin-top: 8px;">${absentList}</div></div>` : '<div style="margin-top: 12px; color: #27ae60;">✅ All students are present</div>'}
-                    </div>
-                `;
+                const absentList = group.absentNames.map(name => `<div style="padding: 8px; background:#fee2e2; margin:4px 0; border-radius:8px;">❌ ${escapeHtml(name)}</div>`).join('');
+                return `<div class="group-card"><div class="group-title">${groupName} - ${group.percentage}%</div>
+                        <div class="group-stats"><div>Total: ${group.total}</div><div class="present">Present: ${group.present}</div><div class="absent">Absent: ${group.absent}</div></div>
+                        ${group.absent > 0 ? `<div><strong>Absent (${group.absent}):</strong>${absentList}</div>` : '<div>✅ All present</div>}</div>`}`;
             }).join('');
         }
         
         function exportAbsenceToExcel() {
             if (!absenceData) return;
-            
             const wsData = [['Absence Report'], ['Date: ' + absenceData.date], []];
-            
             for (const groupName of currentGroups) {
                 const group = absenceData.groups[groupName];
                 if (group && group.absentNames.length > 0) {
-                    wsData.push([groupName + ' - Absent Students (' + group.absentNames.length + ')']);
+                    wsData.push([groupName + ' - Absent (' + group.absentNames.length + ')']);
                     group.absentNames.forEach(name => wsData.push([name]));
                     wsData.push([]);
-                } else if (group) {
-                    wsData.push([groupName + ' - All students present ✅'], []);
                 }
             }
-            
-            wsData.push([], ['Summary']);
-            for (const groupName of currentGroups) {
-                const group = absenceData.groups[groupName];
-                if (group) {
-                    wsData.push([groupName, `Total: ${group.total}`, `Present: ${group.present}`, `Absent: ${group.absent}`, `Percentage: ${group.percentage}%`]);
-                }
-            }
-            
             const ws = XLSX.utils.aoa_to_sheet(wsData);
             ws['!cols'] = [{wch: 25}];
             const wb = XLSX.utils.book_new();
@@ -2026,58 +1912,34 @@
         // ============ NAVIGATION ============
         async function showApp(mode) {
             const config = getCurrentConfig();
-            if (!config) {
-                alert('Please select a sheet first!');
-                return;
-            }
-            
+            if (!config) { alert('Select a sheet first!'); return; }
             resetAppState();
-            
             document.getElementById('welcomeView').classList.add('hidden');
             document.getElementById('absenceView').classList.add('hidden');
             document.getElementById('mainApp').classList.remove('hidden');
-            
-            document.getElementById('activeSheetInfo').innerHTML = `📄 ${currentSheet.name} (${currentAccess} access) | ${currentGroups.length} groups`;
-            
+            document.getElementById('activeSheetInfo').innerHTML = `📄 ${currentSheet.name}`;
             appState.currentMode = mode;
             
             if (mode === 'scan') {
-                document.getElementById('modeTitle').innerText = '📸 Scanner Mode';
-                document.getElementById('modeDescription').innerText = canWrite() ? 'Scan QR code or use Face ID to mark attendance' : 'Read-only mode - cannot mark attendance';
+                document.getElementById('modeTitle').innerText = 'Scanner Mode';
+                document.getElementById('modeDescription').innerText = canWrite() ? 'QR or Face ID' : 'Read-only';
                 document.getElementById('fileSection').classList.add('hidden');
                 await loadDates();
                 await loadGroupStats();
-                
-                // Start with QR mode by default
-                currentMode = 'qr';
-                isFaceMode = false;
-                document.getElementById('qrModeBtn').classList.add('active');
-                document.getElementById('faceModeBtn').classList.remove('active');
-                document.getElementById('qrSection').style.display = 'block';
-                document.getElementById('faceSection').style.display = 'none';
-                await startScanner();
+                switchToQRMode();
                 startBackgroundSync();
-                addLogToUI('System', `Scanner ready - ${currentSheet.name}`, '📸');
             } else {
-                if (!canWrite()) {
-                    alert('⚠️ You have read-only access. Bulk upload is disabled.');
-                    backToWelcome();
-                    return;
-                }
-                document.getElementById('modeTitle').innerText = '📁 Bulk Upload Mode';
+                if (!canWrite()) { alert('Read-only mode'); backToWelcome(); return; }
+                document.getElementById('modeTitle').innerText = 'Bulk Upload';
                 document.getElementById('modeDescription').innerText = 'Upload file to mark multiple names';
                 document.getElementById('fileSection').classList.remove('hidden');
                 await loadDates();
                 await loadGroupStats();
-                addLogToUI('System', `Upload mode ready - ${currentSheet.name}`, '📁');
             }
         }
         
         function resetAppState() {
-            if (appState.scanner) {
-                try { appState.scanner.stop(); } catch(e) {}
-                appState.scanner = null;
-            }
+            if (appState.scanner) { try { appState.scanner.stop(); } catch(e) {} appState.scanner = null; }
             stopFaceRecognition();
             if (appState.syncInterval) clearInterval(appState.syncInterval);
             appState.scannedNamesSet.clear();
@@ -2088,28 +1950,15 @@
         }
         
         function backToWelcome() {
-            if (appState.scanner) {
-                try { appState.scanner.stop(); } catch(e) {}
-                appState.scanner = null;
-            }
-            stopFaceRecognition();
-            if (appState.syncInterval) clearInterval(appState.syncInterval);
+            resetAppState();
             document.getElementById('mainApp').classList.add('hidden');
             document.getElementById('absenceView').classList.add('hidden');
             document.getElementById('welcomeView').classList.remove('hidden');
             loadUserSheets();
         }
         
-        function escapeHtml(str) {
-            if (!str) return '';
-            return str.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;');
-        }
-        
         // Initialize
         checkSavedSession();
-        
-        // Pre-load face models in background
-        loadFaceModels();
     </script>
 </body>
 </html>
