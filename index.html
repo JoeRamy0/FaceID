@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Face Recognition Attendance | St. Joseph Church</title>
-    <!-- Use specific compatible versions -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+    <!-- Use working versions from official CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.8.6/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <style>
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -228,7 +228,7 @@
         <div class="progress-bar"><div id="registerProgress" class="progress-fill"></div></div>
         <div id="registerDebug" class="debug-info"></div>
     </div>
-    <div class="footer">🔗 Connected to Google Sheets | Face detection active - look for green box</div>
+    <div class="footer">🔗 Connected to Google Sheets | Using TensorFlow.js 2.8.6 (compatible version)</div>
 </div>
 
 <script>
@@ -243,7 +243,6 @@
     let membersList = [];
     let faceDescriptorsDB = [];
     let isProcessing = false;
-    let animationFrameId = null;
     let currentAttendanceCamera = 'user';
     let currentRegisterCamera = 'user';
     let detectionInterval = null;
@@ -324,7 +323,7 @@
         const res = await fetchFromSheets("getMembers");
         if(res?.success && res.members) {
             membersList = res.members;
-            updateDebug(attendanceDebugDiv, `Loaded ${membersList.length} members from sheet`);
+            updateDebug(attendanceDebugDiv, `Loaded ${membersList.length} members`);
             return true;
         }
         return false;
@@ -354,7 +353,7 @@
         try {
             updateDebug(attendanceDebugDiv, `Loading models from: ${MODEL_URL}`);
             
-            // Load all required models
+            // Load models one by one with proper error handling
             await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
             updateProgress(attendanceProgress, 40);
             updateDebug(attendanceDebugDiv, "✓ SSD MobileNet loaded");
@@ -380,12 +379,46 @@
         }
     }
     
-    // Simple face detection without continuous loop to avoid errors
-    async function detectFaceAndDraw(video, canvas, indicator) {
+    // Simple face detection function
+    async function detectFace(video) {
+        if (!modelsLoaded || !video.videoWidth) return null;
+        
+        try {
+            // Simple detection without landmarks to avoid errors
+            const detection = await faceapi.detectSingleFace(video);
+            return detection;
+        } catch(e) {
+            return null;
+        }
+    }
+    
+    async function getFaceWithDescriptor(video) {
+        if (!modelsLoaded || !video.videoWidth) return null;
+        
+        for (let attempt = 1; attempt <= 6; attempt++) {
+            try {
+                // Get full detection with descriptor
+                const detection = await faceapi.detectSingleFace(video)
+                    .withFaceLandmarks()
+                    .withFaceDescriptor();
+                
+                if (detection && detection.descriptor) {
+                    return detection;
+                }
+            } catch(e) {
+                // Silent fail, continue trying
+            }
+            await new Promise(r => setTimeout(r, 500));
+        }
+        return null;
+    }
+    
+    // Draw detection on canvas
+    async function drawDetection(video, canvas, indicator) {
         if (!modelsLoaded || !video.videoWidth) return false;
         
         try {
-            const detection = await faceapi.detectSingleFace(video);
+            const detection = await detectFace(video);
             
             const displaySize = { width: video.videoWidth, height: video.videoHeight };
             faceapi.matchDimensions(canvas, displaySize);
@@ -412,54 +445,16 @@
         }
     }
     
-    // Start periodic face detection
-    function startPeriodicDetection(video, canvas, indicator) {
+    function startDetectionLoop(video, canvas, indicator) {
         if (detectionInterval) clearInterval(detectionInterval);
         
         detectionInterval = setInterval(async () => {
-            if (video.videoWidth && modelsLoaded) {
-                await detectFaceAndDraw(video, canvas, indicator);
-            }
-        }, 100);
-    }
-    
-    async function getFaceDescriptor(videoElement) {
-        if (!videoElement.videoWidth) {
-            updateDebug(attendanceDebugDiv, "Video not ready", true);
-            return null;
-        }
-        
-        updateDebug(attendanceDebugDiv, "🔍 Looking for face...");
-        
-        // Try multiple times
-        for (let attempt = 1; attempt <= 8; attempt++) {
-            updateDebug(attendanceDebugDiv, `Attempt ${attempt}/8...`);
-            
-            try {
-                const detection = await faceapi.detectSingleFace(videoElement)
-                    .withFaceLandmarks()
-                    .withFaceDescriptor();
-                
-                if (detection && detection.descriptor) {
-                    updateDebug(attendanceDebugDiv, `✓ Face detected!`);
-                    return detection.descriptor;
-                }
-            } catch(e) {
-                updateDebug(attendanceDebugDiv, `Attempt ${attempt} error`, true);
-            }
-            
-            await new Promise(r => setTimeout(r, 500));
-        }
-        
-        updateDebug(attendanceDebugDiv, "✗ No face detected after 8 attempts", true);
-        return null;
+            await drawDetection(video, canvas, indicator);
+        }, 150);
     }
     
     function findBestMatch(descriptor, threshold = 0.6) {
-        if (faceDescriptorsDB.length === 0) {
-            updateDebug(attendanceDebugDiv, "No registered faces in database", true);
-            return null;
-        }
+        if (faceDescriptorsDB.length === 0) return null;
         
         let bestMatch = null;
         let bestDistance = Infinity;
@@ -473,11 +468,7 @@
         }
         
         updateDebug(attendanceDebugDiv, `Best match: ${bestMatch?.name} (distance: ${bestDistance.toFixed(4)})`);
-        
-        if (bestDistance <= threshold) {
-            return bestMatch;
-        }
-        return null;
+        return bestDistance <= threshold ? bestMatch : null;
     }
     
     // ==================== CAMERA SETUP ====================
@@ -495,7 +486,6 @@
             await videoElement.play();
             return stream;
         } catch(err) {
-            updateDebug(attendanceDebugDiv, `Camera error: ${err.message}`, true);
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
             videoElement.srcObject = stream;
             await videoElement.play();
@@ -504,29 +494,33 @@
     }
     
     async function startAttendanceCamera() {
-        if (attendanceStream) attendanceStream.getTracks().forEach(t => t.stop());
+        if (attendanceStream) {
+            attendanceStream.getTracks().forEach(t => t.stop());
+        }
         if (detectionInterval) clearInterval(detectionInterval);
         
         attendanceStream = await startCamera(attendanceVideo, currentAttendanceCamera);
         if (attendanceStream) {
             const info = document.getElementById('attendanceCameraInfo');
             if (info) info.innerHTML = currentAttendanceCamera === 'user' ? '🤳 Front' : '📱 Back';
-            updateDebug(attendanceDebugDiv, `Camera: ${currentAttendanceCamera === 'user' ? 'Front' : 'Back'}`);
-            startPeriodicDetection(attendanceVideo, attendanceCanvas, attendanceFaceIndicator);
+            updateDebug(attendanceDebugDiv, `Camera started: ${currentAttendanceCamera === 'user' ? 'Front' : 'Back'}`);
+            startDetectionLoop(attendanceVideo, attendanceCanvas, attendanceFaceIndicator);
             return true;
         }
         return false;
     }
     
     async function startRegisterCamera() {
-        if (registerStream) registerStream.getTracks().forEach(t => t.stop());
+        if (registerStream) {
+            registerStream.getTracks().forEach(t => t.stop());
+        }
         
         registerStream = await startCamera(registerVideo, currentRegisterCamera);
         if (registerStream) {
             const info = document.getElementById('registerCameraInfo');
             if (info) info.innerHTML = currentRegisterCamera === 'user' ? '🤳 Front' : '📱 Back';
-            updateDebug(registerDebugDiv, `Camera: ${currentRegisterCamera === 'user' ? 'Front' : 'Back'}`);
-            startPeriodicDetection(registerVideo, registerCanvas, registerFaceIndicator);
+            updateDebug(registerDebugDiv, `Camera started: ${currentRegisterCamera === 'user' ? 'Front' : 'Back'}`);
+            startDetectionLoop(registerVideo, registerCanvas, registerFaceIndicator);
             return true;
         }
         return false;
@@ -566,16 +560,17 @@
         updateStatus(attendanceStatusDiv, "🔍 Detecting face...", "info");
         
         try {
-            const descriptor = await getFaceDescriptor(attendanceVideo);
-            if (!descriptor) {
+            const detection = await getFaceWithDescriptor(attendanceVideo);
+            
+            if (!detection || !detection.descriptor) {
                 updateStatus(attendanceStatusDiv, "😞 No face detected. Try better lighting!", "error");
                 isProcessing = false;
                 captureAttendanceBtn.disabled = false;
                 return;
             }
             
-            updateStatus(attendanceStatusDiv, "🧠 Matching with database...", "info");
-            const match = findBestMatch(descriptor, 0.6);
+            updateStatus(attendanceStatusDiv, "🧠 Matching...", "info");
+            const match = findBestMatch(detection.descriptor, 0.6);
             
             if (!match) {
                 updateStatus(attendanceStatusDiv, "❌ Face not registered. Please register first.", "error");
@@ -597,7 +592,6 @@
             }
         } catch (error) {
             updateStatus(attendanceStatusDiv, `Error: ${error.message}`, "error");
-            updateDebug(attendanceDebugDiv, `Error: ${error.message}`, true);
         } finally {
             isProcessing = false;
             captureAttendanceBtn.disabled = false;
@@ -628,8 +622,9 @@
         updateStatus(registerStatusDiv, "📸 Capturing face...", "info");
         
         try {
-            const descriptor = await getFaceDescriptor(registerVideo);
-            if (!descriptor) {
+            const detection = await getFaceWithDescriptor(registerVideo);
+            
+            if (!detection || !detection.descriptor) {
                 updateStatus(registerStatusDiv, "😞 No face detected. Try better lighting!", "error");
                 updateDebug(registerDebugDiv, "No face detected", true);
                 isProcessing = false;
@@ -637,25 +632,24 @@
                 return;
             }
             
-            updateStatus(registerStatusDiv, "💾 Saving to Google Sheets...", "info");
-            const result = await saveFaceToSheet(name, descriptor);
+            updateStatus(registerStatusDiv, "💾 Saving...", "info");
+            const result = await saveFaceToSheet(name, detection.descriptor);
             
             if (result?.success) {
                 updateStatus(registerStatusDiv, `✅ Registered ${name}!`, "success");
                 updateDebug(registerDebugDiv, `✓ Successfully registered ${name}`);
                 newUserNameInput.value = '';
                 
-                const newDesc = { name, descriptor: new Float32Array(descriptor) };
+                const newDesc = { name, descriptor: new Float32Array(detection.descriptor) };
                 const idx = faceDescriptorsDB.findIndex(f => f.name === name);
                 if (idx !== -1) faceDescriptorsDB[idx] = newDesc;
                 else faceDescriptorsDB.push(newDesc);
-                updateDebug(registerDebugDiv, `Total registered faces: ${faceDescriptorsDB.length}`);
+                updateDebug(registerDebugDiv, `Total registered: ${faceDescriptorsDB.length}`);
             } else {
-                updateStatus(registerStatusDiv, `❌ Failed: ${result?.error || 'Unknown'}`, "error");
+                updateStatus(registerStatusDiv, `❌ Failed to save`, "error");
             }
         } catch (error) {
             updateStatus(registerStatusDiv, `Error: ${error.message}`, "error");
-            updateDebug(registerDebugDiv, `Error: ${error.message}`, true);
         } finally {
             isProcessing = false;
             captureRegisterBtn.disabled = false;
@@ -719,7 +713,7 @@
         await loadModels();
         await startAttendanceCamera();
         
-        updateDebug(attendanceDebugDiv, "✅ App ready! Look at camera - you should see a GREEN BOX around your face");
+        updateDebug(attendanceDebugDiv, "✅ App ready! Look for GREEN box around your face");
     }
     
     window.onload = init;
