@@ -7,7 +7,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js"></script>
     <style>
-        /* Your existing styles remain the same */
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body {
             background: linear-gradient(145deg, #f0f4fa 0%, #d9e2ef 100%);
@@ -228,381 +227,111 @@
         <div class="progress-bar"><div id="registerProgress" class="progress-fill"></div></div>
         <div id="registerDebug" class="debug-info"></div>
     </div>
-    <div class="footer">🔗 Using local storage for faces | Google Sheets API for member data</div>
+    <div class="footer">🔗 Connected to Google Sheets | Face data saved to Sheet2</div>
 </div>
 
 <script>
     // ==================== CONFIGURATION ====================
-    // Use Google Sheets published JSON URL (NO CORS issues!)
-    const SPREADSHEET_ID = '1VYIPqwlbTAA8_NvXT6pUMxIcT8f6Jq2hoayGt1UMNr0';
-const SHEET1_NAME = 'Sheet1';
-const SHEET2_NAME = 'Sheet2';
-
-// ==================== CORS HELPER ====================
-function addCORSHeaders(output) {
-  output.setHeader('Access-Control-Allow-Origin', '*');
-  output.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  output.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  output.setHeader('Access-Control-Max-Age', '3600');
-  return output;
-}
-
-// ==================== DO GET ENDPOINT ====================
-function doGet(e) {
-  const output = ContentService.createTextOutput();
-  addCORSHeaders(output);
-  output.setMimeType(ContentService.MimeType.JSON);
-  
-  try {
-    const action = e.parameter.action;
-    
-    if (action === 'getMembers') {
-      const result = getMembers();
-      output.setContent(JSON.stringify(result));
-    } 
-    else if (action === 'getFaceData') {
-      const result = getFaceData();
-      output.setContent(JSON.stringify(result));
-    }
-    else if (action === 'markAttendance') {
-      const name = e.parameter.name;
-      const date = e.parameter.date;
-      const result = markAttendance(name, date);
-      output.setContent(JSON.stringify(result));
-    }
-    else {
-      output.setContent(JSON.stringify({ success: false, error: 'Invalid action' }));
-    }
-  } catch (error) {
-    output.setContent(JSON.stringify({ success: false, error: error.toString() }));
-  }
-  
-  return output;
-}
-
-// ==================== DO POST ENDPOINT ====================
-function doPost(e) {
-  const output = ContentService.createTextOutput();
-  addCORSHeaders(output);
-  output.setMimeType(ContentService.MimeType.JSON);
-  
-  try {
-    let params;
-    if (e.postData && e.postData.contents) {
-      params = JSON.parse(e.postData.contents);
-    } else {
-      return output.setContent(JSON.stringify({ success: false, error: 'No data received' }));
-    }
-    
-    const action = params.action;
-    
-    if (action === 'saveFace') {
-      const result = saveFaceData(params.name, params.descriptor);
-      output.setContent(JSON.stringify(result));
-    }
-    else {
-      output.setContent(JSON.stringify({ success: false, error: 'Invalid action' }));
-    }
-  } catch (error) {
-    output.setContent(JSON.stringify({ success: false, error: error.toString() }));
-  }
-  
-  return output;
-}
-
-// ==================== OPTIONS HANDLER FOR CORS PREFLIGHT ====================
-function doOptions(e) {
-  const output = ContentService.createTextOutput();
-  addCORSHeaders(output);
-  output.setContent(JSON.stringify({ success: true }));
-  return output;
-}
-
-// ==================== GET ALL MEMBERS FROM SHEET1 ====================
-function getMembers() {
-  try {
-    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET1_NAME);
-    const lastRow = sheet.getLastRow();
-    
-    if (lastRow <= 1) {
-      return { success: true, members: [] };
-    }
-    
-    const namesRange = sheet.getRange(2, 1, lastRow - 1, 1);
-    const names = namesRange.getValues();
-    
-    const members = [];
-    for (let i = 0; i < names.length; i++) {
-      const name = names[i][0];
-      if (name && name.toString().trim() !== '') {
-        members.push({
-          name: name.toString().trim(),
-          rowIndex: i + 2
-        });
-      }
-    }
-    
-    return { success: true, members: members };
-    
-  } catch (error) {
-    return { success: false, error: error.toString() };
-  }
-}
-
-// ==================== GET ALL FACE DESCRIPTORS FROM SHEET2 ====================
-function getFaceData() {
-  try {
-    let sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET2_NAME);
-    
-    if (!sheet) {
-      sheet = SpreadsheetApp.openById(SPREADSHEET_ID).insertSheet(SHEET2_NAME);
-      sheet.getRange(1, 1).setValue('Name');
-      sheet.getRange(1, 2).setValue('FaceDescriptor');
-      sheet.getRange(1, 3).setValue('LastUpdated');
-      return { success: true, faces: [] };
-    }
-    
-    const lastRow = sheet.getLastRow();
-    if (lastRow <= 1) {
-      return { success: true, faces: [] };
-    }
-    
-    const data = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
-    const faces = [];
-    
-    for (let i = 0; i < data.length; i++) {
-      const name = data[i][0];
-      const descriptorStr = data[i][1];
-      
-      if (name && descriptorStr) {
-        try {
-          const descriptorArray = JSON.parse(descriptorStr);
-          faces.push({
-            name: name.toString().trim(),
-            descriptor: descriptorArray
-          });
-        } catch (e) {
-          console.error(`Error parsing descriptor for ${name}: ${e}`);
-        }
-      }
-    }
-    
-    return { success: true, faces: faces };
-    
-  } catch (error) {
-    return { success: false, error: error.toString() };
-  }
-}
-
-// ==================== SAVE FACE DESCRIPTOR TO SHEET2 ====================
-function saveFaceData(name, descriptorArray) {
-  try {
-    let sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET2_NAME);
-    
-    if (!sheet) {
-      sheet = SpreadsheetApp.openById(SPREADSHEET_ID).insertSheet(SHEET2_NAME);
-      sheet.getRange(1, 1).setValue('Name');
-      sheet.getRange(1, 2).setValue('FaceDescriptor');
-      sheet.getRange(1, 3).setValue('LastUpdated');
-    }
-    
-    const descriptorJSON = JSON.stringify(descriptorArray);
-    const lastRow = sheet.getLastRow();
-    let existingRow = -1;
-    const cleanName = name.toString().trim();
-    
-    if (lastRow > 1) {
-      const names = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-      for (let i = 0; i < names.length; i++) {
-        if (names[i][0] && names[i][0].toString().trim() === cleanName) {
-          existingRow = i + 2;
-          break;
-        }
-      }
-    }
-    
-    const timestamp = new Date().toISOString();
-    
-    if (existingRow > 0) {
-      sheet.getRange(existingRow, 2).setValue(descriptorJSON);
-      sheet.getRange(existingRow, 3).setValue(timestamp);
-    } else {
-      const newRow = lastRow + 1;
-      sheet.getRange(newRow, 1).setValue(cleanName);
-      sheet.getRange(newRow, 2).setValue(descriptorJSON);
-      sheet.getRange(newRow, 3).setValue(timestamp);
-    }
-    
-    return { success: true, message: `Face saved for ${cleanName}` };
-    
-  } catch (error) {
-    return { success: false, error: error.toString() };
-  }
-}
-
-// ==================== MARK ATTENDANCE IN SHEET1 ====================
-function markAttendance(name, dateStr) {
-  try {
-    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET1_NAME);
-    const cleanName = name.toString().trim();
-    
-    // Find person's row
-    const lastRow = sheet.getLastRow();
-    const namesRange = sheet.getRange(2, 1, lastRow - 1, 1);
-    const names = namesRange.getValues();
-    
-    let personRow = -1;
-    for (let i = 0; i < names.length; i++) {
-      if (names[i][0] && names[i][0].toString().trim() === cleanName) {
-        personRow = i + 2;
-        break;
-      }
-    }
-    
-    if (personRow === -1) {
-      throw new Error(`Person "${cleanName}" not found in sheet`);
-    }
-    
-    // Find date column
-    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    let dateColumn = -1;
-    const targetDate = new Date(dateStr);
-    targetDate.setHours(0, 0, 0, 0);
-    
-    for (let i = 0; i < headers.length; i++) {
-      if (headers[i] instanceof Date) {
-        const headerDate = new Date(headers[i]);
-        headerDate.setHours(0, 0, 0, 0);
-        if (headerDate.getTime() === targetDate.getTime()) {
-          dateColumn = i + 1;
-          break;
-        }
-      }
-    }
-    
-    if (dateColumn === -1) {
-      const lastCol = sheet.getLastColumn() + 1;
-      const newDate = new Date(dateStr);
-      newDate.setHours(0, 0, 0, 0);
-      sheet.getRange(1, lastCol).setValue(newDate);
-      dateColumn = lastCol;
-    }
-    
-    // Check if already marked
-    const currentValue = sheet.getRange(personRow, dateColumn).getValue();
-    if (currentValue === '⛪') {
-      return { success: true, message: `Already marked for ${cleanName}`, alreadyMarked: true };
-    }
-    
-    // Mark attendance
-    sheet.getRange(personRow, dateColumn).setValue('⛪');
-    updateTotalCount(sheet, personRow);
-    
-    return { 
-      success: true, 
-      message: `Attendance marked for ${cleanName} on ${dateStr}`,
-      row: personRow,
-      column: dateColumn
-    };
-    
-  } catch (error) {
-    return { success: false, error: error.toString() };
-  }
-}
-
-// ==================== UPDATE TOTAL COUNT ====================
-function updateTotalCount(sheet, personRow) {
-  try {
-    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    let totalCol = -1;
-    
-    for (let i = 0; i < headers.length; i++) {
-      if (headers[i] === 'المجموع' || headers[i] === 'Total') {
-        totalCol = i + 1;
-        break;
-      }
-    }
-    
-    if (totalCol === -1) {
-      totalCol = sheet.getLastColumn();
-    }
-    
-    let count = 0;
-    for (let col = 2; col < totalCol; col++) {
-      const value = sheet.getRange(personRow, col).getValue();
-      if (value === '⛪') {
-        count++;
-      }
-    }
-    
-    sheet.getRange(personRow, totalCol).setValue(count);
-    
-  } catch (error) {
-    console.error(`Error updating total count: ${error}`);
-  }
-}
-
-// ==================== GET TODAY'S ATTENDANCE REPORT ====================
-function getTodayAttendance() {
-  try {
-    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET1_NAME);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    let todayColumn = -1;
-    
-    for (let i = 0; i < headers.length; i++) {
-      if (headers[i] instanceof Date) {
-        const headerDate = new Date(headers[i]);
-        headerDate.setHours(0, 0, 0, 0);
-        if (headerDate.getTime() === today.getTime()) {
-          todayColumn = i + 1;
-          break;
-        }
-      }
-    }
-    
-    if (todayColumn === -1) {
-      return { success: true, attendees: [] };
-    }
-    
-    const lastRow = sheet.getLastRow();
-    const names = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-    const attendance = sheet.getRange(2, todayColumn, lastRow - 1, 1).getValues();
-    
-    const attendees = [];
-    for (let i = 0; i < attendance.length; i++) {
-      if (attendance[i][0] === '⛪') {
-        attendees.push(names[i][0]);
-      }
-    }
-    
-    return { success: true, attendees: attendees, date: today.toISOString() };
-    
-  } catch (error) {
-    return { success: false, error: error.toString() };
-  }
-}
-📋 Updated HTML (with Apps Script Integration)
-Now update your HTML. Replace the configuration section and add the Apps Script functions:
-
-html
-<script>
-    // ==================== CONFIGURATION ====================
-    // Google Apps Script URL (CORS-enabled - must be deployed with "Anyone" access)
+    // REPLACE THIS WITH YOUR DEPLOYED APPS SCRIPT URL
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbMd7ZvHyMVS_yUK6ANUEn4TYhLNe9o4hHz26q3Fp2a1yMhq6FlWSmgzvhBa4-MS2nug/exec";
     
-    // Use Google Sheets published JSON URL for reading members (faster, no CORS)
+    // Google Sheets published JSON URL for reading members (no CORS)
     const SHEET_ID = '1VYIPqwlbTAA8_NvXT6pUMxIcT8f6Jq2hoayGt1UMNr0';
     const SHEET_GID = '0';
     const GOOGLE_SHEETS_JSON_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${SHEET_GID}`;
     
     const MODEL_URL = './models';
     
-    // ==================== REPLACE THE loadFaceDescriptors AND saveFaceToStorage FUNCTIONS ====================
+    // ==================== GLOBALS ====================
+    let modelsLoaded = false;
+    let attendanceVideo, attendanceCanvas, registerVideo, registerCanvas;
+    let attendanceStream = null, registerStream = null;
+    let membersList = [];
+    let faceDescriptorsDB = [];
+    let isProcessing = false;
+    let currentAttendanceCamera = 'user';
+    let currentRegisterCamera = 'user';
+    let detectionInterval = null;
     
-    // Load face descriptors from Google Sheets (Sheet2)
+    // UI Elements
+    const takeAttendanceBtn = document.getElementById('takeAttendanceBtn');
+    const registerFaceBtn = document.getElementById('registerFaceBtn');
+    const attendancePanelDiv = document.getElementById('attendancePanel');
+    const registerPanelDiv = document.getElementById('registerPanel');
+    const captureAttendanceBtn = document.getElementById('captureAttendance');
+    const captureRegisterBtn = document.getElementById('captureRegister');
+    const attendanceStatusDiv = document.getElementById('attendanceStatus');
+    const registerStatusDiv = document.getElementById('registerStatus');
+    const attendanceResultDiv = document.getElementById('attendanceResult');
+    const attendanceDebugDiv = document.getElementById('attendanceDebug');
+    const registerDebugDiv = document.getElementById('registerDebug');
+    const newUserNameInput = document.getElementById('newUserName');
+    const attendanceProgress = document.getElementById('attendanceProgress');
+    const registerProgress = document.getElementById('registerProgress');
+    const attendanceFaceIndicator = document.getElementById('attendanceFaceIndicator');
+    const registerFaceIndicator = document.getElementById('registerFaceIndicator');
+    const attendanceFrontCam = document.getElementById('attendanceFrontCam');
+    const attendanceBackCam = document.getElementById('attendanceBackCam');
+    const registerFrontCam = document.getElementById('registerFrontCam');
+    const registerBackCam = document.getElementById('registerBackCam');
+    
+    function getLocalDate() {
+        const d = new Date();
+        d.setHours(d.getHours() + 2);
+        return d.toISOString().slice(0, 10);
+    }
+    
+    function updateStatus(element, message, type = 'info') {
+        element.textContent = message;
+        element.className = 'status ' + type;
+    }
+    
+    function updateDebug(element, message, isError = false) {
+        const timestamp = new Date().toLocaleTimeString();
+        const prefix = isError ? '❌' : '✅';
+        element.innerHTML = `${prefix} [${timestamp}] ${message}<br>` + element.innerHTML;
+        const lines = element.innerHTML.split('<br>');
+        if (lines.length > 20) element.innerHTML = lines.slice(0, 20).join('<br>');
+        console.log(message);
+    }
+    
+    function updateProgress(element, percent) {
+        if (element) element.style.width = percent + '%';
+    }
+    
+    // ==================== LOAD MEMBERS FROM GOOGLE SHEETS ====================
+    async function loadMembers() {
+        try {
+            updateDebug(attendanceDebugDiv, "📥 Loading members from Google Sheets...");
+            const response = await fetch(GOOGLE_SHEETS_JSON_URL);
+            const text = await response.text();
+            
+            const jsonStr = text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1);
+            const data = JSON.parse(jsonStr);
+            
+            const rows = data.table.rows;
+            const members = [];
+            
+            for (let i = 1; i < rows.length; i++) {
+                const nameCell = rows[i].c[0];
+                if (nameCell && nameCell.v && nameCell.v.toString().trim() !== '') {
+                    members.push({
+                        name: nameCell.v.toString().trim(),
+                        rowIndex: i + 1
+                    });
+                }
+            }
+            
+            membersList = members;
+            updateDebug(attendanceDebugDiv, `✅ Loaded ${membersList.length} members from Google Sheets`);
+            return true;
+        } catch (err) {
+            updateDebug(attendanceDebugDiv, `❌ Error loading members: ${err.message}`, true);
+            return false;
+        }
+    }
+    
+    // ==================== LOAD FACE DESCRIPTORS FROM SHEET2 ====================
     async function loadFaceDescriptors() {
         try {
             updateDebug(attendanceDebugDiv, "📥 Loading face descriptors from Google Sheets...");
@@ -616,11 +345,9 @@ html
                 }));
                 updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} face descriptors from Google Sheets`);
                 
-                // Also save to localStorage as backup
                 localStorage.setItem('face_descriptors', JSON.stringify(result.faces));
                 return true;
             } else {
-                // Fallback to localStorage
                 const stored = localStorage.getItem('face_descriptors');
                 if (stored) {
                     const faces = JSON.parse(stored);
@@ -628,13 +355,12 @@ html
                         name: f.name, 
                         descriptor: new Float32Array(f.descriptor) 
                     }));
-                    updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} face descriptors from local storage (fallback)`);
+                    updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} face descriptors from local storage`);
                     return true;
                 }
             }
         } catch (err) {
             updateDebug(attendanceDebugDiv, `⚠️ Error loading from Apps Script: ${err.message}`, true);
-            // Fallback to localStorage
             const stored = localStorage.getItem('face_descriptors');
             if (stored) {
                 const faces = JSON.parse(stored);
@@ -650,8 +376,8 @@ html
         return true;
     }
     
-    // Save face descriptor to Google Sheets (Sheet2) via Apps Script
-    async function saveFaceToStorage(name, descriptorArray) {
+    // ==================== SAVE FACE TO SHEET2 ====================
+    async function saveFaceToSheet(name, descriptorArray) {
         try {
             updateDebug(registerDebugDiv, `💾 Saving face to Google Sheets...`);
             
@@ -668,13 +394,11 @@ html
             const result = await response.json();
             
             if (result.success) {
-                // Update local database
                 const newDescFloat = { name, descriptor: new Float32Array(descriptorArray) };
                 const memIdx = faceDescriptorsDB.findIndex(f => f.name === name);
                 if (memIdx !== -1) faceDescriptorsDB[memIdx] = newDescFloat;
                 else faceDescriptorsDB.push(newDescFloat);
                 
-                // Also save to localStorage as backup
                 const backupFaces = faceDescriptorsDB.map(f => ({ 
                     name: f.name, 
                     descriptor: Array.from(f.descriptor) 
@@ -687,9 +411,8 @@ html
                 throw new Error(result.error || 'Unknown error');
             }
         } catch (err) {
-            updateDebug(registerDebugDiv, `❌ Error saving to Google Sheets: ${err.message}`, true);
+            updateDebug(registerDebugDiv, `❌ Error: ${err.message}`, true);
             
-            // Fallback to localStorage only
             const newDesc = { name, descriptor: Array.from(descriptorArray) };
             const existing = faceDescriptorsDB.map(f => ({ name: f.name, descriptor: Array.from(f.descriptor) }));
             const idx = existing.findIndex(f => f.name === name);
@@ -698,18 +421,17 @@ html
             
             localStorage.setItem('face_descriptors', JSON.stringify(existing));
             
-            // Update in-memory DB
             const newDescFloat = { name, descriptor: new Float32Array(descriptorArray) };
             const memIdx = faceDescriptorsDB.findIndex(f => f.name === name);
             if (memIdx !== -1) faceDescriptorsDB[memIdx] = newDescFloat;
             else faceDescriptorsDB.push(newDescFloat);
             
-            updateDebug(registerDebugDiv, `⚠️ Saved to local storage only (Google Sheets unavailable)`);
+            updateDebug(registerDebugDiv, `⚠️ Saved to local storage only`);
             return { success: true, warning: 'Saved locally only' };
         }
     }
     
-    // Mark attendance in Google Sheets (Sheet1)
+    // ==================== MARK ATTENDANCE IN SHEET1 ====================
     async function markAttendanceInSheet(name) {
         const todayStr = getLocalDate();
         
@@ -729,9 +451,8 @@ html
                 throw new Error(result.error || 'Unknown error');
             }
         } catch (err) {
-            updateDebug(attendanceDebugDiv, `❌ Error marking attendance: ${err.message}`, true);
+            updateDebug(attendanceDebugDiv, `❌ Error: ${err.message}`, true);
             
-            // Fallback to localStorage
             const stored = localStorage.getItem('attendance_log') || '[]';
             const log = JSON.parse(stored);
             const alreadyMarked = log.some(entry => entry.name === name && entry.date === todayStr);
@@ -739,13 +460,14 @@ html
             if (!alreadyMarked) {
                 log.push({ name, date: todayStr, timestamp: new Date().toISOString() });
                 localStorage.setItem('attendance_log', JSON.stringify(log));
-                updateDebug(attendanceDebugDiv, `⚠️ Attendance saved locally only (Google Sheets unavailable)`);
+                updateDebug(attendanceDebugDiv, `⚠️ Attendance saved locally only`);
                 return { success: true, alreadyMarked: false, localOnly: true };
             }
             return { success: true, alreadyMarked: true };
         }
+    }
     
-    // Display today's attendance from local storage
+    // Display today's attendance
     function displayTodayAttendance() {
         const todayStr = getLocalDate();
         const stored = localStorage.getItem('attendance_log') || '[]';
@@ -785,7 +507,7 @@ html
             updateDebug(attendanceDebugDiv, "✓ Face Recognition loaded");
             
             modelsLoaded = true;
-            updateStatus(attendanceStatusDiv, "✅ Models ready! Face detection active", "success");
+            updateStatus(attendanceStatusDiv, "✅ Models ready!", "success");
             updateStatus(registerStatusDiv, "✅ Models ready!", "success");
             
             setTimeout(() => updateProgress(attendanceProgress, 0), 1000);
@@ -986,7 +708,6 @@ html
             
             updateStatus(attendanceStatusDiv, `✅ Recognized: ${match.name}`, "success");
             const result = await markAttendanceInSheet(match.name);
-            const todayStr = getLocalDate();
             
             if (result?.success) {
                 displayTodayAttendance();
@@ -1037,7 +758,7 @@ html
             }
             
             updateStatus(registerStatusDiv, "💾 Saving...", "info");
-            const result = await saveFaceToStorage(name, detection.descriptor);
+            const result = await saveFaceToSheet(name, detection.descriptor);
             
             if (result?.success) {
                 updateStatus(registerStatusDiv, `✅ Registered ${name}!`, "success");
