@@ -770,6 +770,10 @@
                     <label>📧 Email</label>
                     <input type="email" id="email" placeholder="Enter your email">
                 </div>
+                <div class="form-group">
+    <label>🔒 Password</label>
+    <input type="password" id="password" placeholder="Enter your password">
+</div>
                 <button class="login-btn" onclick="login()">🔐 Login</button>
             </div>
         </div>
@@ -942,23 +946,45 @@
         const STORAGE_USER_KEY = 'attendance_user';
         
         // Default Sheets - Configure your sheets here
-        const DEFAULT_SHEETS = [
+       // Default Sheets - Configure your sheets here
+const DEFAULT_SHEETS = [
+    {
+        id: "sheet1",  // <-- ADD THIS LINE! This is the ID that matches allowedSheets
+        name: "Attendance Sheet",
+        url: "https://script.google.com/macros/s/AKfycbwAxnQgxbxPrG-75bKT_mqHLalPYY2fueedzKgeJSDq2Ekh0viLd8PtkV_m1cBs7bIFSg/exec",
+        sheetId: "1eLBj6T5M8toC9nBgZt70elYYrRjWYkdWzTkeKx-k5zA",
+        faceSheetId: "1eLBj6T5M8toC9nBgZt70elYYrRjWYkdWzTkeKx-k5zA",
+        groups: ["خدام", "تالتة بنين", "رابعة بنين", "تالتة بنات", "رابعة بنات"],
+        access: "full"
+    }
+];
+        
+        // Users
+         const USERS = [
             {
-                name: "Attendance Sheet",
-                url: "https://script.google.com/macros/s/AKfycbwAxnQgxbxPrG-75bKT_mqHLalPYY2fueedzKgeJSDq2Ekh0viLd8PtkV_m1cBs7bIFSg/exec",
-                sheetId: "1eLBj6T5M8toC9nBgZt70elYYrRjWYkdWzTkeKx-k5zA",
-                faceSheetId: "1eLBj6T5M8toC9nBgZt70elYYrRjWYkdWzTkeKx-k5zA", // Separate sheet for face data
-                groups: ["خدام", "تالتة بنين", "رابعة بنين", "تالتة بنات", "رابعة بنات"],
-                access: "full"
+                username: "admin",
+                email: "admin@church.com",
+                password: "admin123",  // Simple password for demo
+                role: "Admin",
+                allowedSheets: ["sheet1"]  // Sheet IDs this user can access
+            },
+            {
+                username: "teacher",
+                email: "teacher@church.com", 
+                password: "teacher123",
+                role: "Teacher",
+                allowedSheets: ["sheet1"]
+            },
+            {
+                username: "youssef",
+                email: "youssef@church.com",
+                password: "youssef123",
+                role: "Admin",
+                allowedSheets: ["sheet1"]
             }
         ];
         
-        // Users
-        const USERS = [
-            { username: "admin", email: "admin@church.com", role: "Admin", sheets: null }
-        ];
-        
-        // Global State
+        // ============ GLOBAL STATE ============
         let allSheets = [];
         let currentUser = null;
         let currentSheet = null;
@@ -1003,8 +1029,8 @@
         
         function getUserSheets() {
             if (!currentUser) return [];
-            if (currentUser.sheets === null) return allSheets;
-            return allSheets.filter(sheet => currentUser.sheets.includes(sheet.name));
+            if (!currentUser.allowedSheets) return allSheets;
+            return allSheets.filter(sheet => currentUser.allowedSheets.includes(sheet.id));
         }
         
         function loadUserSheets() {
@@ -1025,6 +1051,7 @@
             document.getElementById('uploadBtn').classList.remove('disabled');
             document.getElementById('absenceBtn').classList.remove('disabled');
             
+            // Set first sheet as active if none selected
             if (!currentSheet) {
                 currentSheet = userSheets[0];
                 currentAccess = currentSheet.access;
@@ -1036,31 +1063,33 @@
             }
             
             container.innerHTML = userSheets.map((sheet, index) => `
-                <div class="sheet-item ${currentSheet && currentSheet.sheetId === sheet.sheetId ? 'active' : ''}" onclick="selectSheet(${index})">
+                <div class="sheet-item ${currentSheet && currentSheet.id === sheet.id ? 'active' : ''}" onclick="selectSheet('${sheet.id}')">
                     <div class="sheet-info">
                         <div class="sheet-name">${escapeHtml(sheet.name)}</div>
                         <div class="sheet-details">${sheet.groups.length} groups | Face: ${sheet.faceSheetId ? '✓' : '✗'}</div>
                     </div>
                     <div class="sheet-actions">
                         <div class="access-badge ${sheet.access}">${sheet.access === 'full' ? 'Full' : 'View'}</div>
-                        <button class="icon-btn" onclick="event.stopPropagation(); deleteSheet(${index})">🗑️</button>
+                        <button class="icon-btn" onclick="event.stopPropagation(); deleteSheet('${sheet.id}')">🗑️</button>
                     </div>
                 </div>
             `).join('');
         }
         
-        function selectSheet(index) {
+        function selectSheet(sheetId) {
             const userSheets = getUserSheets();
-            currentSheet = userSheets[index];
-            currentAccess = currentSheet.access;
-            currentGroups = currentSheet.groups;
-            loadUserSheets();
-            addLogToUI('System', `Switched to: ${currentSheet.name}`, '🔄');
-            
-            if (!document.getElementById('mainApp').classList.contains('hidden')) {
-                loadDates();
-                loadGroupStats();
-                if (isFaceMode) loadKnownFaces();
+            currentSheet = userSheets.find(s => s.id === sheetId);
+            if (currentSheet) {
+                currentAccess = currentSheet.access;
+                currentGroups = currentSheet.groups;
+                loadUserSheets();
+                addLogToUI('System', `Switched to: ${currentSheet.name}`, '🔄');
+                
+                if (!document.getElementById('mainApp').classList.contains('hidden')) {
+                    loadDates();
+                    loadGroupStats();
+                    if (isFaceMode) loadKnownFaces();
+                }
             }
         }
         
@@ -1068,7 +1097,7 @@
             const name = document.getElementById('newSheetName').value.trim();
             const url = document.getElementById('newSheetUrl').value.trim();
             const sheetId = document.getElementById('newSheetId').value.trim();
-            const faceSheetId = document.getElementById('newSheetFaceId').value.trim();
+            const faceSheetId = document.getElementById('newSheetFaceId').value.trim() || sheetId;
             const groupsStr = document.getElementById('newSheetGroups').value.trim();
             const access = document.getElementById('newSheetAccess').value;
             
@@ -1078,19 +1107,26 @@
             }
             
             const groups = groupsStr.split(',').map(g => g.trim()).filter(g => g);
+            const newId = 'sheet_' + Date.now();
             
             allSheets.push({
+                id: newId,
                 name: name,
                 url: url,
                 sheetId: sheetId,
-                faceSheetId: faceSheetId || null,
+                faceSheetId: faceSheetId,
                 groups: groups,
                 access: access
             });
             
             saveSheets();
-            loadUserSheets();
             
+            // If current user has access to all sheets, reload
+            if (currentUser && currentUser.allowedSheets === null) {
+                loadUserSheets();
+            }
+            
+            // Clear form
             document.getElementById('newSheetName').value = '';
             document.getElementById('newSheetUrl').value = '';
             document.getElementById('newSheetId').value = '';
@@ -1101,19 +1137,20 @@
             addLogToUI('System', `Added sheet: ${name}`, '✅');
         }
         
-        function deleteSheet(index) {
+        function deleteSheet(sheetId) {
             const userSheets = getUserSheets();
             if (userSheets.length === 1) {
-                alert('Cannot delete the only sheet!');
+                alert('Cannot delete the only sheet you have access to!');
                 return;
             }
             
-            const sheetName = userSheets[index].name;
-            const globalIndex = allSheets.findIndex(s => s.name === sheetName);
-            if (globalIndex !== -1) allSheets.splice(globalIndex, 1);
-            saveSheets();
+            const sheetIndex = allSheets.findIndex(s => s.id === sheetId);
+            if (sheetIndex !== -1) {
+                allSheets.splice(sheetIndex, 1);
+                saveSheets();
+            }
             
-            if (currentSheet && currentSheet.name === sheetName) {
+            if (currentSheet && currentSheet.id === sheetId) {
                 const remaining = getUserSheets();
                 if (remaining.length > 0) {
                     currentSheet = remaining[0];
@@ -1125,7 +1162,7 @@
             }
             
             loadUserSheets();
-            addLogToUI('System', `Deleted: ${sheetName}`, '🗑️');
+            addLogToUI('System', `Deleted sheet`, '🗑️');
         }
         
         function toggleAddSheetForm() {
@@ -1148,16 +1185,130 @@
             return currentAccess === 'full';
         }
         
-        // ============ FACE RECOGNITION ============
+        // ============ LOGIN FUNCTIONS ============
+        function login() {
+            const username = document.getElementById('username').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password') ? document.getElementById('password').value.trim() : '';
+            const errorDiv = document.getElementById('loginError');
+            
+            if (!username || !email) {
+                errorDiv.classList.remove('hidden');
+                errorDiv.innerHTML = '❌ Please enter both username and email';
+                return;
+            }
+            
+            // Find user by username and email
+            const user = USERS.find(u => 
+                u.username.toLowerCase() === username.toLowerCase() && 
+                u.email.toLowerCase() === email.toLowerCase()
+            );
+            
+            if (!user) {
+                errorDiv.classList.remove('hidden');
+                errorDiv.innerHTML = '❌ Invalid credentials. Please check your username and email.';
+                return;
+            }
+            
+            // Optional password check (if you want to add password field)
+            if (user.password && password && user.password !== password) {
+                errorDiv.classList.remove('hidden');
+                errorDiv.innerHTML = '❌ Incorrect password.';
+                return;
+            }
+            
+            currentUser = user;
+            
+            // Save session
+            localStorage.setItem(STORAGE_USER_KEY, JSON.stringify({
+                username: user.username,
+                email: user.email,
+                role: user.role
+            }));
+            
+            loadSheets();
+            loadUserSheets();
+            
+            document.getElementById('loginView').classList.add('hidden');
+            document.getElementById('welcomeView').classList.remove('hidden');
+            
+            // Update user avatar and info
+            const avatar = document.getElementById('userAvatar');
+            if (avatar) {
+                avatar.innerHTML = user.username.charAt(0).toUpperCase();
+            }
+            document.getElementById('displayName').innerHTML = `${user.username}`;
+            document.getElementById('displayEmail').innerHTML = `${user.email}`;
+            document.getElementById('displayRole').innerHTML = `${user.role}`;
+            
+            addLogToUI('System', `Welcome ${user.username}! You have access to ${getUserSheets().length} sheet(s)`, '✅');
+        }
+        
+        function logout() {
+            currentUser = null;
+            currentSheet = null;
+            currentAccess = null;
+            currentGroups = [];
+            localStorage.removeItem(STORAGE_USER_KEY);
+            
+            // Stop all processes
+            if (appState.scanner) {
+                try { appState.scanner.stop(); } catch(e) {}
+                appState.scanner = null;
+            }
+            stopFaceRecognition();
+            if (appState.syncInterval) clearInterval(appState.syncInterval);
+            
+            document.getElementById('welcomeView').classList.add('hidden');
+            document.getElementById('mainApp').classList.add('hidden');
+            document.getElementById('absenceView').classList.add('hidden');
+            document.getElementById('loginView').classList.remove('hidden');
+            document.getElementById('username').value = '';
+            document.getElementById('email').value = '';
+            if (document.getElementById('password')) document.getElementById('password').value = '';
+        }
+        
+        function checkSavedSession() {
+            const saved = localStorage.getItem(STORAGE_USER_KEY);
+            if (saved) {
+                const userData = JSON.parse(saved);
+                const user = USERS.find(u => u.username === userData.username && u.email === userData.email);
+                if (user) {
+                    currentUser = user;
+                    loadSheets();
+                    loadUserSheets();
+                    document.getElementById('loginView').classList.add('hidden');
+                    document.getElementById('welcomeView').classList.remove('hidden');
+                    
+                    const avatar = document.getElementById('userAvatar');
+                    if (avatar) {
+                        avatar.innerHTML = user.username.charAt(0).toUpperCase();
+                    }
+                    document.getElementById('displayName').innerHTML = `${user.username}`;
+                    document.getElementById('displayEmail').innerHTML = `${user.email}`;
+                    document.getElementById('displayRole').innerHTML = `${user.role}`;
+                    
+                    addLogToUI('System', `Welcome back ${user.username}!`, '✅');
+                }
+            }
+        }
+        
+        // Add this to your login form in HTML (add password field)
+        // Add after email field:
+        // <div class="form-group">
+        //     <label>🔒 Password</label>
+        //     <input type="password" id="password" placeholder="Enter your password">
+        // </div>
+        
+        // ============ FACE RECOGNITION FUNCTIONS ============
         async function loadFaceModels() {
             const statusDiv = document.getElementById('faceStatus');
-            const progressDiv = document.getElementById('modelProgress');
+            if (!statusDiv) return;
+            
             statusDiv.style.display = 'block';
             statusDiv.innerHTML = '<span>📥 Loading face detection models...</span>';
-            progressDiv.innerHTML = 'This may take a few seconds on first load';
             
             try {
-                // Load models from CDN with error handling
                 await Promise.all([
                     faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/models'),
                     faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/models'),
@@ -1166,7 +1317,6 @@
                 
                 faceModelsLoaded = true;
                 statusDiv.innerHTML = '<span>✅ Face models loaded successfully!</span>';
-                progressDiv.innerHTML = '';
                 setTimeout(() => {
                     statusDiv.style.display = 'none';
                 }, 2000);
@@ -1174,7 +1324,6 @@
             } catch (error) {
                 console.error('Error loading face models:', error);
                 statusDiv.innerHTML = '<span>❌ Failed to load face models. Check internet connection.</span>';
-                progressDiv.innerHTML = 'Please refresh and try again.';
                 return false;
             }
         }
@@ -1186,7 +1335,7 @@
             const faceSheetId = config.FACE_SHEET_ID;
             
             try {
-                const response = await fetch(`${config.SCRIPT_URL}?action=getAllMembers&sheetId=${faceSheetId}`);
+                const response = await fetch(`${config.SCRIPT_URL}?action=getAllMembers&sheetId=${faceSheetId}&sheetName=FaceData`);
                 const members = await response.json();
                 
                 knownFaces = [];
@@ -1275,10 +1424,10 @@
                                 }
                             }, 2000);
                         } else {
-                            faceStatus.innerHTML = `<span>🔍 Face detected: ${bestMatch.label} (${(bestMatch.distance * 100).toFixed(1)}% confidence)</span>`;
+                            faceStatus.innerHTML = `<span>🔍 Face detected: ${bestMatch.label} (${(bestMatch.distance * 100).toFixed(1)}%)</span>`;
                         }
                     } else if (detections.length > 0) {
-                        faceStatus.innerHTML = '<span>🔍 Face detected - loading recognition data...</span>';
+                        faceStatus.innerHTML = '<span>🔍 Face detected - loading recognition...</span>';
                     } else {
                         faceStatus.innerHTML = '<span>👤 Looking for a face...</span>';
                     }
@@ -1325,7 +1474,7 @@
                 const descriptor = Array.from(detection.descriptor);
                 const faceSheetId = config.FACE_SHEET_ID;
                 
-                const response = await fetch(`${config.SCRIPT_URL}?action=registerFace&sheetId=${faceSheetId}&name=${encodeURIComponent(name)}&descriptor=${JSON.stringify(descriptor)}`);
+                const response = await fetch(`${config.SCRIPT_URL}?action=registerFace&sheetId=${faceSheetId}&sheetName=FaceData&name=${encodeURIComponent(name)}&descriptor=${JSON.stringify(descriptor)}`);
                 const result = await response.text();
                 
                 if (result.includes('Success')) {
@@ -1411,76 +1560,6 @@
             }
             
             await startFaceRecognition();
-        }
-        
-        // ============ LOGIN FUNCTIONS ============
-        function login() {
-            const username = document.getElementById('username').value.trim();
-            const email = document.getElementById('email').value.trim();
-            const errorDiv = document.getElementById('loginError');
-            
-            if (!username || !email) {
-                errorDiv.classList.remove('hidden');
-                errorDiv.innerHTML = '❌ Please enter both username and email';
-                return;
-            }
-            
-            const user = USERS.find(u => u.username.toLowerCase() === username.toLowerCase() && u.email.toLowerCase() === email.toLowerCase());
-            
-            if (!user) {
-                errorDiv.classList.remove('hidden');
-                errorDiv.innerHTML = '❌ Invalid credentials';
-                return;
-            }
-            
-            currentUser = user;
-            localStorage.setItem(STORAGE_USER_KEY, JSON.stringify({ username: user.username, email: user.email, role: user.role }));
-            
-            loadSheets();
-            loadUserSheets();
-            
-            document.getElementById('loginView').classList.add('hidden');
-            document.getElementById('welcomeView').classList.remove('hidden');
-            
-            document.getElementById('userAvatar').innerHTML = user.username.charAt(0).toUpperCase();
-            document.getElementById('displayName').innerHTML = user.username;
-            document.getElementById('displayEmail').innerHTML = user.email;
-            document.getElementById('displayRole').innerHTML = user.role;
-            
-            addLogToUI('System', `Welcome ${user.username}!`, '✅');
-        }
-        
-        function logout() {
-            currentUser = null;
-            currentSheet = null;
-            localStorage.removeItem(STORAGE_USER_KEY);
-            stopFaceRecognition();
-            if (appState.scanner) try { appState.scanner.stop(); } catch(e) {}
-            if (appState.syncInterval) clearInterval(appState.syncInterval);
-            
-            document.getElementById('welcomeView').classList.add('hidden');
-            document.getElementById('mainApp').classList.add('hidden');
-            document.getElementById('absenceView').classList.add('hidden');
-            document.getElementById('loginView').classList.remove('hidden');
-        }
-        
-        function checkSavedSession() {
-            const saved = localStorage.getItem(STORAGE_USER_KEY);
-            if (saved) {
-                const userData = JSON.parse(saved);
-                const user = USERS.find(u => u.username === userData.username && u.email === userData.email);
-                if (user) {
-                    currentUser = user;
-                    loadSheets();
-                    loadUserSheets();
-                    document.getElementById('loginView').classList.add('hidden');
-                    document.getElementById('welcomeView').classList.remove('hidden');
-                    document.getElementById('userAvatar').innerHTML = user.username.charAt(0).toUpperCase();
-                    document.getElementById('displayName').innerHTML = user.username;
-                    document.getElementById('displayEmail').innerHTML = user.email;
-                    document.getElementById('displayRole').innerHTML = user.role;
-                }
-            }
         }
         
         // ============ UI HELPERS ============
@@ -1959,6 +2038,8 @@
         
         // Initialize
         checkSavedSession();
+        // Pre-load face models in background
+        setTimeout(() => loadFaceModels(), 2000);
     </script>
 </body>
 </html>
