@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Face Recognition Attendance | St. Joseph Church</title>
-    <!-- Use working versions from official CDN -->
-   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js"></script>
     <style>
+        /* Your existing styles remain the same */
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body {
             background: linear-gradient(145deg, #f0f4fa 0%, #d9e2ef 100%);
@@ -228,12 +228,16 @@
         <div class="progress-bar"><div id="registerProgress" class="progress-fill"></div></div>
         <div id="registerDebug" class="debug-info"></div>
     </div>
-    <div class="footer">🔗 Connected to Google Sheets | Using TensorFlow.js 2.8.6 (compatible version)</div>
+    <div class="footer">🔗 Using local storage for faces | Google Sheets API for member data</div>
 </div>
 
 <script>
     // ==================== CONFIGURATION ====================
-    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbMd7ZvHyMVS_yUK6ANUEn4TYhLNe9o4hHz26q3Fp2a1yMhq6FlWSmgzvhBa4-MS2nug/exec";
+    // Use Google Sheets published JSON URL (NO CORS issues!)
+    const SHEET_ID = '1VYIPqwlbTAA8_NvXT6pUMxIcT8f6Jq2hoayGt1UMNr0';
+    const SHEET_GID = '0'; // This is the first sheet (Sheet1)
+    const GOOGLE_SHEETS_JSON_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${SHEET_GID}`;
+    
     const MODEL_URL = './models';
     
     // ==================== GLOBALS ====================
@@ -293,54 +297,120 @@
         if (element) element.style.width = percent + '%';
     }
     
-    // ==================== GOOGLE SHEETS API ====================
-    async function fetchFromSheets(action, payload = {}) {
-        try {
-            const params = new URLSearchParams({action, ...payload});
-            const response = await fetch(`${GOOGLE_SCRIPT_URL}?${params.toString()}`, { method: 'GET' });
-            return await response.json();
-        } catch (err) {
-            updateDebug(attendanceDebugDiv, `Error: ${err.message}`, true);
-            return { success: false, error: err.message };
-        }
-    }
-    
-    async function saveFaceToSheet(name, descriptorArray) {
-        try {
-            const response = await fetch(GOOGLE_SCRIPT_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: "saveFace", name: name, descriptor: Array.from(descriptorArray) })
-            });
-            return await response.json();
-        } catch (err) {
-            updateDebug(registerDebugDiv, `Error: ${err.message}`, true);
-            return { success: false, error: err.message };
-        }
-    }
-    
+    // ==================== LOAD MEMBERS FROM GOOGLE SHEETS (NO CORS) ====================
     async function loadMembers() {
-        const res = await fetchFromSheets("getMembers");
-        if(res?.success && res.members) {
-            membersList = res.members;
-            updateDebug(attendanceDebugDiv, `Loaded ${membersList.length} members`);
+        try {
+            updateDebug(attendanceDebugDiv, "📥 Loading members from Google Sheets...");
+            const response = await fetch(GOOGLE_SHEETS_JSON_URL);
+            const text = await response.text();
+            
+            // Parse Google Sheets JSONP response
+            const jsonStr = text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1);
+            const data = JSON.parse(jsonStr);
+            
+            const rows = data.table.rows;
+            const members = [];
+            
+            // Skip header row (row 0) and get names from column 0
+            for (let i = 1; i < rows.length; i++) {
+                const nameCell = rows[i].c[0];
+                if (nameCell && nameCell.v && nameCell.v.toString().trim() !== '') {
+                    members.push({
+                        name: nameCell.v.toString().trim(),
+                        rowIndex: i + 1
+                    });
+                }
+            }
+            
+            membersList = members;
+            updateDebug(attendanceDebugDiv, `✅ Loaded ${membersList.length} members from Google Sheets`);
             return true;
+        } catch (err) {
+            updateDebug(attendanceDebugDiv, `❌ Error loading members: ${err.message}`, true);
+            return false;
         }
-        return false;
     }
     
+    // ==================== LOCAL STORAGE FOR FACE DESCRIPTORS ====================
     async function loadFaceDescriptors() {
-        const res = await fetchFromSheets("getFaceData");
-        if(res?.success && res.faces) {
-            faceDescriptorsDB = res.faces.map(f => ({ name: f.name, descriptor: new Float32Array(f.descriptor) }));
-            updateDebug(attendanceDebugDiv, `Loaded ${faceDescriptorsDB.length} face descriptors`);
-            return true;
+        const stored = localStorage.getItem('face_descriptors');
+        if (stored) {
+            try {
+                const faces = JSON.parse(stored);
+                faceDescriptorsDB = faces.map(f => ({ 
+                    name: f.name, 
+                    descriptor: new Float32Array(f.descriptor) 
+                }));
+                updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} face descriptors from local storage`);
+                return true;
+            } catch(e) {
+                updateDebug(attendanceDebugDiv, `⚠️ Error parsing stored faces`, true);
+            }
         }
-        return false;
+        updateDebug(attendanceDebugDiv, `📭 No stored face descriptors found`);
+        return true;
     }
     
+    async function saveFaceToStorage(name, descriptorArray) {
+        try {
+            const newDesc = { name, descriptor: Array.from(descriptorArray) };
+            const existing = faceDescriptorsDB.map(f => ({ name: f.name, descriptor: Array.from(f.descriptor) }));
+            const idx = existing.findIndex(f => f.name === name);
+            if (idx !== -1) existing[idx] = newDesc;
+            else existing.push(newDesc);
+            
+            localStorage.setItem('face_descriptors', JSON.stringify(existing));
+            
+            // Update in-memory DB
+            const newDescFloat = { name, descriptor: new Float32Array(descriptorArray) };
+            const memIdx = faceDescriptorsDB.findIndex(f => f.name === name);
+            if (memIdx !== -1) faceDescriptorsDB[memIdx] = newDescFloat;
+            else faceDescriptorsDB.push(newDescFloat);
+            
+            updateDebug(registerDebugDiv, `✅ Face saved to local storage for ${name}`);
+            return { success: true };
+        } catch (err) {
+            updateDebug(registerDebugDiv, `❌ Error saving face: ${err.message}`, true);
+            return { success: false, error: err.message };
+        }
+    }
+    
+    // ==================== MARK ATTENDANCE (LOCAL FOR NOW) ====================
     async function markAttendanceInSheet(name) {
-        return await fetchFromSheets("markAttendance", { name, date: getLocalDate() });
+        // For now, store attendance locally since we can't POST to Sheets directly
+        const todayStr = getLocalDate();
+        const stored = localStorage.getItem('attendance_log') || '[]';
+        const log = JSON.parse(stored);
+        
+        // Check if already marked today
+        const alreadyMarked = log.some(entry => entry.name === name && entry.date === todayStr);
+        
+        if (!alreadyMarked) {
+            log.push({ name, date: todayStr, timestamp: new Date().toISOString() });
+            localStorage.setItem('attendance_log', JSON.stringify(log));
+            updateDebug(attendanceDebugDiv, `✅ Attendance stored locally for ${name} on ${todayStr}`);
+        } else {
+            updateDebug(attendanceDebugDiv, `ℹ️ ${name} already marked today`);
+        }
+        
+        return { success: true, alreadyMarked: alreadyMarked };
+    }
+    
+    // Display today's attendance from local storage
+    function displayTodayAttendance() {
+        const todayStr = getLocalDate();
+        const stored = localStorage.getItem('attendance_log') || '[]';
+        const log = JSON.parse(stored);
+        const todayAttendance = log.filter(entry => entry.date === todayStr);
+        
+        attendanceResultDiv.innerHTML = '';
+        if (todayAttendance.length === 0) {
+            attendanceResultDiv.innerHTML = '<div style="text-align:center;color:#6c757d;">📋 No attendance recorded yet today</div>';
+        } else {
+            todayAttendance.forEach(entry => {
+                attendanceResultDiv.innerHTML += `<div class="attendance-item"><span>⛪ ${entry.name}</span><span class="badge">${entry.date}</span></div>`;
+            });
+        }
     }
     
     // ==================== FACE RECOGNITION ====================
@@ -353,7 +423,6 @@
         try {
             updateDebug(attendanceDebugDiv, `Loading models from: ${MODEL_URL}`);
             
-            // Load models one by one with proper error handling
             await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
             updateProgress(attendanceProgress, 40);
             updateDebug(attendanceDebugDiv, "✓ SSD MobileNet loaded");
@@ -379,14 +448,10 @@
         }
     }
     
-    // Simple face detection function
     async function detectFace(video) {
         if (!modelsLoaded || !video.videoWidth) return null;
-        
         try {
-            // Simple detection without landmarks to avoid errors
-            const detection = await faceapi.detectSingleFace(video);
-            return detection;
+            return await faceapi.detectSingleFace(video);
         } catch(e) {
             return null;
         }
@@ -397,29 +462,23 @@
         
         for (let attempt = 1; attempt <= 6; attempt++) {
             try {
-                // Get full detection with descriptor
                 const detection = await faceapi.detectSingleFace(video)
                     .withFaceLandmarks()
                     .withFaceDescriptor();
-                
                 if (detection && detection.descriptor) {
                     return detection;
                 }
-            } catch(e) {
-                // Silent fail, continue trying
-            }
+            } catch(e) {}
             await new Promise(r => setTimeout(r, 500));
         }
         return null;
     }
     
-    // Draw detection on canvas
     async function drawDetection(video, canvas, indicator) {
         if (!modelsLoaded || !video.videoWidth) return false;
         
         try {
             const detection = await detectFace(video);
-            
             const displaySize = { width: video.videoWidth, height: video.videoHeight };
             faceapi.matchDimensions(canvas, displaySize);
             const ctx = canvas.getContext('2d');
@@ -447,7 +506,6 @@
     
     function startDetectionLoop(video, canvas, indicator) {
         if (detectionInterval) clearInterval(detectionInterval);
-        
         detectionInterval = setInterval(async () => {
             await drawDetection(video, canvas, indicator);
         }, 150);
@@ -472,77 +530,31 @@
     }
     
     // ==================== CAMERA SETUP ====================
-    // ==================== UPDATED CAMERA SETUP ====================
-async function startCamera(videoElement, cameraType) {
-    try {
-        const constraints = { 
-            video: { 
-                facingMode: cameraType,
-                width: { ideal: 1280 }, // Higher res for better recognition
-                height: { ideal: 720 }
-            } 
-        };
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        videoElement.srcObject = stream;
-
-        // CRITICAL: Wait for metadata to load so dimensions are known
-        return new Promise((resolve) => {
-            videoElement.onloadedmetadata = () => {
-                videoElement.play();
-                resolve(stream);
+    async function startCamera(videoElement, cameraType) {
+        try {
+            const constraints = { 
+                video: { 
+                    facingMode: cameraType,
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                } 
             };
-        });
-    } catch(err) {
-        updateDebug(attendanceDebugDiv, "Camera Error: " + err.message, true);
-        return null;
-    }
-}
-
-// ==================== UPDATED DETECTION LOOP ====================
-async function drawDetection(video, canvas, indicator) {
-    if (!modelsLoaded || !video.videoWidth || video.paused) return false;
-    
-    try {
-        // Match dimensions EVERY time to handle screen rotations
-        const displaySize = { width: video.offsetWidth, height: video.offsetHeight };
-        if (canvas.width !== displaySize.width) {
-            canvas.width = displaySize.width;
-            canvas.height = displaySize.height;
-            faceapi.matchDimensions(canvas, displaySize);
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            videoElement.srcObject = stream;
+            return new Promise((resolve) => {
+                videoElement.onloadedmetadata = () => {
+                    videoElement.play();
+                    resolve(stream);
+                };
+            });
+        } catch(err) {
+            updateDebug(attendanceDebugDiv, "Camera Error: " + err.message, true);
+            return null;
         }
-
-        const detection = await faceapi.detectSingleFace(
-            video, 
-            new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 })
-        );
-        
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        if (detection) {
-            const resized = faceapi.resizeResults(detection, displaySize);
-            faceapi.draw.drawDetections(canvas, resized);
-            if (indicator) {
-                indicator.innerHTML = '✅ Face detected!';
-                indicator.style.background = 'rgba(46, 125, 50, 0.9)';
-            }
-            return true;
-        } else {
-            if (indicator) {
-                indicator.innerHTML = '🔍 No face detected';
-                indicator.style.background = 'rgba(0,0,0,0.7)';
-            }
-            return false;
-        }
-    } catch(e) {
-        return false;
     }
-}
     
     async function startAttendanceCamera() {
-        if (attendanceStream) {
-            attendanceStream.getTracks().forEach(t => t.stop());
-        }
+        if (attendanceStream) attendanceStream.getTracks().forEach(t => t.stop());
         if (detectionInterval) clearInterval(detectionInterval);
         
         attendanceStream = await startCamera(attendanceVideo, currentAttendanceCamera);
@@ -557,9 +569,7 @@ async function drawDetection(video, canvas, indicator) {
     }
     
     async function startRegisterCamera() {
-        if (registerStream) {
-            registerStream.getTracks().forEach(t => t.stop());
-        }
+        if (registerStream) registerStream.getTracks().forEach(t => t.stop());
         
         registerStream = await startCamera(registerVideo, currentRegisterCamera);
         if (registerStream) {
@@ -630,8 +640,7 @@ async function drawDetection(video, canvas, indicator) {
             const todayStr = getLocalDate();
             
             if (result?.success) {
-                attendanceResultDiv.innerHTML = `<div class="attendance-item"><span>⛪ ${match.name}</span><span class="badge">${todayStr}</span></div>` + attendanceResultDiv.innerHTML;
-                attendanceResultDiv.scrollTop = 0;
+                displayTodayAttendance();
                 updateDebug(attendanceDebugDiv, `✓ Attendance marked for ${match.name}`);
             } else {
                 updateStatus(attendanceStatusDiv, `⚠️ Could not mark attendance`, "error");
@@ -679,17 +688,12 @@ async function drawDetection(video, canvas, indicator) {
             }
             
             updateStatus(registerStatusDiv, "💾 Saving...", "info");
-            const result = await saveFaceToSheet(name, detection.descriptor);
+            const result = await saveFaceToStorage(name, detection.descriptor);
             
             if (result?.success) {
                 updateStatus(registerStatusDiv, `✅ Registered ${name}!`, "success");
                 updateDebug(registerDebugDiv, `✓ Successfully registered ${name}`);
                 newUserNameInput.value = '';
-                
-                const newDesc = { name, descriptor: new Float32Array(detection.descriptor) };
-                const idx = faceDescriptorsDB.findIndex(f => f.name === name);
-                if (idx !== -1) faceDescriptorsDB[idx] = newDesc;
-                else faceDescriptorsDB.push(newDesc);
                 updateDebug(registerDebugDiv, `Total registered: ${faceDescriptorsDB.length}`);
             } else {
                 updateStatus(registerStatusDiv, `❌ Failed to save`, "error");
@@ -710,6 +714,7 @@ async function drawDetection(video, canvas, indicator) {
             registerFaceBtn.classList.remove("active");
             if (registerStream) { registerStream.getTracks().forEach(t => t.stop()); registerStream = null; }
             startAttendanceCamera();
+            displayTodayAttendance();
         } else {
             attendancePanelDiv.classList.remove("active-panel");
             registerPanelDiv.classList.add("active-panel");
@@ -722,75 +727,56 @@ async function drawDetection(video, canvas, indicator) {
     
     // ==================== INITIALIZATION ====================
     async function init() {
-    // 1. Initialize UI references
-    attendanceVideo = document.getElementById('attendanceVideo');
-    attendanceCanvas = document.getElementById('attendanceCanvas');
-    registerVideo = document.getElementById('registerVideo');
-    registerCanvas = document.getElementById('registerCanvas');
-
-    // 2. Setup TensorFlow Backend (The fix for the 'multiply' error)
-   // Replace your current backend block with this:
-try {
-    // WebGL is much faster for church attendance (real-time)
-    await tf.setBackend('webgl');
-    await tf.ready();
-    updateDebug(attendanceDebugDiv, `🚀 Engine: WebGL (Fast Mode)`);
-} catch (e) {
-    console.warn("WebGL failed, falling back to CPU");
-    await tf.setBackend('cpu');
-    await tf.ready();
-    updateDebug(attendanceDebugDiv, `⚠️ Engine: CPU (Slow Mode)`);
-}
-
-    // 3. Handle Canvas Responsiveness
-   function setupCanvas() {
-    const video = (attendancePanelDiv.classList.contains('active-panel')) ? attendanceVideo : registerVideo;
-    const canvas = (attendancePanelDiv.classList.contains('active-panel')) ? attendanceCanvas : registerCanvas;
-    
-    if (video.videoWidth > 0) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        faceapi.matchDimensions(canvas, { width: video.videoWidth, height: video.videoHeight });
-    }
-}
-    
-    // Initial setup and listener for screen rotation/resize
-    setupCanvas();
-    window.addEventListener('resize', setupCanvas);
-
-    // 4. Bind Button Event Listeners
-    attendanceFrontCam.onclick = () => switchAttendanceCamera('user');
-    attendanceBackCam.onclick = () => switchAttendanceCamera('environment');
-    registerFrontCam.onclick = () => switchRegisterCamera('user');
-    registerBackCam.onclick = () => switchRegisterCamera('environment');
-    
-    captureAttendanceBtn.onclick = takeAttendance;
-    captureRegisterBtn.onclick = registerFace;
-    takeAttendanceBtn.onclick = () => setMode("attendance");
-    registerFaceBtn.onclick = () => setMode("register");
-
-    // 5. Load Data and AI Models
-    updateStatus(attendanceStatusDiv, "🛰️ Syncing with Google Sheets...", "info");
-    
-    try {
-        const membersLoaded = await loadMembers();
-        const facesLoaded = await loadFaceDescriptors();
+        attendanceVideo = document.getElementById('attendanceVideo');
+        attendanceCanvas = document.getElementById('attendanceCanvas');
+        registerVideo = document.getElementById('registerVideo');
+        registerCanvas = document.getElementById('registerCanvas');
         
-        if (!membersLoaded || !facesLoaded) {
-            updateDebug(attendanceDebugDiv, "⚠️ Partial data loaded from Sheets", true);
+        function setupCanvas() {
+            const wrapper = document.querySelector('.video-wrapper');
+            if (wrapper) {
+                const rect = wrapper.getBoundingClientRect();
+                if (rect.width > 0) {
+                    attendanceCanvas.width = rect.width;
+                    attendanceCanvas.height = rect.height;
+                    registerCanvas.width = rect.width;
+                    registerCanvas.height = rect.height;
+                }
+            }
         }
-
-        const modelsStatus = await loadModels();
-        if (modelsStatus) {
-            updateDebug(attendanceDebugDiv, "✅ AI Models Loaded");
-            await startAttendanceCamera();
-            updateDebug(attendanceDebugDiv, "✅ System Ready");
+        setTimeout(setupCanvas, 100);
+        window.addEventListener('resize', setupCanvas);
+        
+        attendanceFrontCam.onclick = () => switchAttendanceCamera('user');
+        attendanceBackCam.onclick = () => switchAttendanceCamera('environment');
+        registerFrontCam.onclick = () => switchRegisterCamera('user');
+        registerBackCam.onclick = () => switchRegisterCamera('environment');
+        
+        captureAttendanceBtn.onclick = takeAttendance;
+        captureRegisterBtn.onclick = registerFace;
+        takeAttendanceBtn.onclick = () => setMode("attendance");
+        registerFaceBtn.onclick = () => setMode("register");
+        
+        updateDebug(attendanceDebugDiv, "🚀 Starting application...");
+        
+        try {
+            await tf.setBackend('webgl');
+            await tf.ready();
+            updateDebug(attendanceDebugDiv, `🚀 Engine: WebGL (Fast Mode)`);
+        } catch (e) {
+            await tf.setBackend('cpu');
+            await tf.ready();
+            updateDebug(attendanceDebugDiv, `⚠️ Engine: CPU (Slow Mode)`);
         }
-    } catch (err) {
-        updateDebug(attendanceDebugDiv, `FATAL: ${err.message}`, true);
-        updateStatus(attendanceStatusDiv, "❌ Initialization Failed", "error");
+        
+        await loadMembers();
+        await loadFaceDescriptors();
+        await loadModels();
+        await startAttendanceCamera();
+        displayTodayAttendance();
+        
+        updateDebug(attendanceDebugDiv, "✅ System Ready! Look for GREEN box around your face");
     }
-}
     
     window.onload = init;
     window.onbeforeunload = () => {
