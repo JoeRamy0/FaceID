@@ -472,29 +472,72 @@
     }
     
     // ==================== CAMERA SETUP ====================
-    async function startCamera(videoElement, cameraType) {
-        try {
-            const constraints = { 
-                video: { 
-                    facingMode: cameraType,
-                    width: { ideal: 640 },
-                    height: { ideal: 480 }
-                } 
+    // ==================== UPDATED CAMERA SETUP ====================
+async function startCamera(videoElement, cameraType) {
+    try {
+        const constraints = { 
+            video: { 
+                facingMode: cameraType,
+                width: { ideal: 1280 }, // Higher res for better recognition
+                height: { ideal: 720 }
+            } 
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        videoElement.srcObject = stream;
+
+        // CRITICAL: Wait for metadata to load so dimensions are known
+        return new Promise((resolve) => {
+            videoElement.onloadedmetadata = () => {
+                videoElement.play();
+                resolve(stream);
             };
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            videoElement.srcObject = stream;
-            await videoElement.play();
-            return stream;
-        } catch(err) {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            videoElement.srcObject = stream;
-            await videoElement.play();
-            videoElement.setAttribute('autoplay', '');
-videoElement.setAttribute('muted', '');
-videoElement.setAttribute('playsinline', '');
-            return stream;
-        }
+        });
+    } catch(err) {
+        updateDebug(attendanceDebugDiv, "Camera Error: " + err.message, true);
+        return null;
     }
+}
+
+// ==================== UPDATED DETECTION LOOP ====================
+async function drawDetection(video, canvas, indicator) {
+    if (!modelsLoaded || !video.videoWidth || video.paused) return false;
+    
+    try {
+        // Match dimensions EVERY time to handle screen rotations
+        const displaySize = { width: video.offsetWidth, height: video.offsetHeight };
+        if (canvas.width !== displaySize.width) {
+            canvas.width = displaySize.width;
+            canvas.height = displaySize.height;
+            faceapi.matchDimensions(canvas, displaySize);
+        }
+
+        const detection = await faceapi.detectSingleFace(
+            video, 
+            new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 })
+        );
+        
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        if (detection) {
+            const resized = faceapi.resizeResults(detection, displaySize);
+            faceapi.draw.drawDetections(canvas, resized);
+            if (indicator) {
+                indicator.innerHTML = '✅ Face detected!';
+                indicator.style.background = 'rgba(46, 125, 50, 0.9)';
+            }
+            return true;
+        } else {
+            if (indicator) {
+                indicator.innerHTML = '🔍 No face detected';
+                indicator.style.background = 'rgba(0,0,0,0.7)';
+            }
+            return false;
+        }
+    } catch(e) {
+        return false;
+    }
+}
     
     async function startAttendanceCamera() {
         if (attendanceStream) {
