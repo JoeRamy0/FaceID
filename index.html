@@ -261,7 +261,7 @@
 
 <script>
     // ==================== CONFIGURATION ====================
-    // Google Apps Script URL - REPLACE WITH YOUR DEPLOYED URL
+    // IMPORTANT: REPLACE WITH YOUR ACTUAL APPS SCRIPT URL
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbMd7ZvHyMVS_yUK6ANUEn4TYhLNe9o4hHz26q3Fp2a1yMhq6FlWSmgzvhBa4-MS2nug/exec";
     
     // Google Sheets published JSON URL for reading members and dates (no CORS)
@@ -369,7 +369,7 @@
                 if (cell && cell.v) {
                     const cellValue = cell.v.toString().trim();
                     
-                    // Skip non-date headers (like "العدد", "Total", etc.)
+                    // Skip non-date headers
                     if (cellValue === 'العدد' || cellValue === 'Total' || cellValue === 'المجموع' || 
                         cellValue === 'الحضور' || cellValue === 'الغياب' || cellValue === 'نسبة' ||
                         cellValue.includes('العدد') || cellValue === '') {
