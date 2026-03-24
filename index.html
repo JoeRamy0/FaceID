@@ -1922,18 +1922,24 @@
             }
         }
         
-        function renderAbsenceGroups(data) {
-            const container = document.getElementById('absenceGroupsContainer');
-            if (!container) return;
-            container.innerHTML = currentGroups.map(groupName => {
-                const group = data.groups[groupName];
-                if (!group) return '';
-                const absentList = group.absentNames.map(name => `<div style="padding: 8px; background:#fee2e2; margin:4px 0; border-radius:8px;">❌ ${escapeHtml(name)}</div>`).join('');
-                return `<div class="group-card"><div class="group-title">${groupName} - ${group.percentage}%</div>
-                        <div class="group-stats"><div>Total: ${group.total}</div><div class="present">Present: ${group.present}</div><div class="absent">Absent: ${group.absent}</div></div>
-                        ${group.absent > 0 ? `<div><strong>Absent (${group.absent}):</strong>${absentList}</div>` : '<div>✅ All present</div>}</div>`}`;
-            }).join('');
-        }
+     function renderAbsenceGroups(data) {
+    const container = document.getElementById('absenceGroupsContainer');
+    if (!container) return;
+    container.innerHTML = currentGroups.map(groupName => {
+        const group = data.groups[groupName];
+        if (!group) return '';
+        const absentList = group.absentNames.map(name => `<div style="padding: 8px; background:#fee2e2; margin:4px 0; border-radius:8px;">❌ ${escapeHtml(name)}</div>`).join('');
+        return `<div class="group-card">
+                    <div class="group-title">${groupName} - ${group.percentage}%</div>
+                    <div class="group-stats">
+                        <div>Total: ${group.total}</div>
+                        <div class="present">Present: ${group.present}</div>
+                        <div class="absent">Absent: ${group.absent}</div>
+                    </div>
+                    ${group.absent > 0 ? `<div><strong>Absent (${group.absent}):</strong>${absentList}</div>` : '<div>✅ All present</div>'}
+                </div>`;
+    }).join('');
+}
         
         function exportAbsenceToExcel() {
             if (!absenceData) return;
