@@ -221,14 +221,14 @@
         </div>
         <div class="input-group">
             <label>👤 Full Name (exactly as in Sheet1)</label>
-            <input type="text" id="newUserName" placeholder="Example: Youssef Rami Sami" autocomplete="off">
+            <input type="text" id="newUserName" placeholder="Example: يوسف رامي سامي" autocomplete="off">
         </div>
         <button id="captureRegister" class="btn-capture">📸 Capture Face & Register</button>
         <div id="registerStatus" class="status">⏳ Loading AI models...</div>
         <div class="progress-bar"><div id="registerProgress" class="progress-fill"></div></div>
         <div id="registerDebug" class="debug-info"></div>
     </div>
-    <div class="footer">🔗 Connected to Google Sheets | Models loaded from local folder</div>
+    <div class="footer">🔗 Connected to Google Sheets | Using SSD MobileNet for face detection</div>
 </div>
 
 <script>
@@ -246,7 +246,6 @@
     let animationFrameId = null;
     let currentAttendanceCamera = 'user';
     let currentRegisterCamera = 'user';
-    let lastDetectionTime = 0;
     
     // UI Elements
     const takeAttendanceBtn = document.getElementById('takeAttendanceBtn');
@@ -354,7 +353,7 @@
         try {
             updateDebug(attendanceDebugDiv, `Loading models from: ${MODEL_URL}`);
             
-            // Load all required models
+            // Load SSD MobileNet (main detection model) - NOT TinyFaceDetector
             await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
             updateProgress(attendanceProgress, 40);
             updateDebug(attendanceDebugDiv, "✓ SSD MobileNet loaded");
@@ -380,12 +379,15 @@
         }
     }
     
-    // Draw face detection with bounding box
+    // Draw face detection with bounding box - Using SSD MobileNet (no TinyFaceDetector)
     async function drawFaceDetection(video, canvas, indicator) {
         if (!modelsLoaded || !video.videoWidth) return false;
         
         try {
-            const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions());
+            // Use SSD MobileNet - this is the correct detector for your models
+            const detection = await faceapi.detectSingleFace(video)
+                .withFaceLandmarks();
+            
             const displaySize = { width: video.videoWidth, height: video.videoHeight };
             faceapi.matchDimensions(canvas, displaySize);
             const ctx = canvas.getContext('2d');
@@ -428,14 +430,15 @@
             return null;
         }
         
-        updateDebug(attendanceDebugDiv, "🔍 Looking for face...");
+        updateDebug(attendanceDebugDiv, "🔍 Looking for face with SSD MobileNet...");
         
         // Try multiple times with increasing delays
         for (let attempt = 1; attempt <= 6; attempt++) {
             updateDebug(attendanceDebugDiv, `Attempt ${attempt}/6...`);
             
             try {
-                const detection = await faceapi.detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions())
+                // Use SSD MobileNet for detection (no TinyFaceDetector)
+                const detection = await faceapi.detectSingleFace(videoElement)
                     .withFaceLandmarks()
                     .withFaceDescriptor();
                 
@@ -729,6 +732,7 @@
         await startAttendanceCamera();
         
         updateDebug(attendanceDebugDiv, "✅ App ready! Look at camera - you should see a GREEN BOX around your face");
+        updateDebug(attendanceDebugDiv, "ℹ️ Using SSD MobileNet for face detection (more accurate)");
     }
     
     window.onload = init;
