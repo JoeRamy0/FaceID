@@ -7,6 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js"></script>
     <style>
+        /* Keep your existing styles - they are fine */
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body {
             background: linear-gradient(145deg, #f0f4fa 0%, #d9e2ef 100%);
@@ -357,6 +358,12 @@
             for (let i = 1; i < headerRow.c.length; i++) {
                 const cell = headerRow.c[i];
                 if (cell && cell.v) {
+                    // Skip if the value is "العدد" or empty or not a date
+                    const cellValue = cell.v.toString().trim();
+                    if (cellValue === 'العدد' || cellValue === 'Total' || cellValue === 'المجموع' || cellValue === '') {
+                        continue;
+                    }
+                    
                     let dateValue = null;
                     
                     // Check if it's a date object or string
@@ -391,7 +398,7 @@
             
             updateDebug(attendanceDebugDiv, `📅 Found ${dateHeaders.length} dates`);
             if (dateHeaders.length > 0) {
-                updateDebug(attendanceDebugDiv, `Dates: ${dateHeaders.map(d => d.dateStr).join(', ')}`);
+                updateDebug(attendanceDebugDiv, `Dates: ${dateHeaders.slice(0, 10).map(d => d.dateStr).join(', ')}${dateHeaders.length > 10 ? '...' : ''}`);
             } else {
                 updateDebug(attendanceDebugDiv, `⚠️ No dates found. Check your sheet header row.`, true);
             }
@@ -402,7 +409,7 @@
                 const row = rows[i];
                 if (row && row.c && row.c[0] && row.c[0].v) {
                     const name = row.c[0].v.toString().trim();
-                    if (name && name !== '') {
+                    if (name && name !== '' && name !== 'الأسم') {
                         members.push({
                             name: name,
                             rowIndex: i + 1 // 1-indexed row for API
