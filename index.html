@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Face Recognition Attendance | St. Joseph Church</title>
-    <!-- Load TensorFlow.js with WebGL backend first -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+    <!-- Use specific compatible versions -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <style>
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -228,7 +228,7 @@
         <div class="progress-bar"><div id="registerProgress" class="progress-fill"></div></div>
         <div id="registerDebug" class="debug-info"></div>
     </div>
-    <div class="footer">🔗 Connected to Google Sheets | Using SSD MobileNet for face detection</div>
+    <div class="footer">🔗 Connected to Google Sheets | Face detection active - look for green box</div>
 </div>
 
 <script>
@@ -246,6 +246,7 @@
     let animationFrameId = null;
     let currentAttendanceCamera = 'user';
     let currentRegisterCamera = 'user';
+    let detectionInterval = null;
     
     // UI Elements
     const takeAttendanceBtn = document.getElementById('takeAttendanceBtn');
@@ -352,12 +353,6 @@
         
         try {
             updateDebug(attendanceDebugDiv, `Loading models from: ${MODEL_URL}`);
-            updateDebug(attendanceDebugDiv, `TensorFlow.js backend: ${tf.getBackend()}`);
-            
-            // Ensure WebGL backend is set
-            await tf.setBackend('webgl');
-            await tf.ready();
-            updateDebug(attendanceDebugDiv, `✅ TensorFlow.js backend: ${tf.getBackend()}`);
             
             // Load all required models
             await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
@@ -385,14 +380,12 @@
         }
     }
     
-    // Draw face detection with bounding box - Using SSD MobileNet
-    async function drawFaceDetection(video, canvas, indicator) {
+    // Simple face detection without continuous loop to avoid errors
+    async function detectFaceAndDraw(video, canvas, indicator) {
         if (!modelsLoaded || !video.videoWidth) return false;
         
         try {
-            // Use SSD MobileNet with proper options
-            const detection = await faceapi.detectSingleFace(video)
-                .withFaceLandmarks();
+            const detection = await faceapi.detectSingleFace(video);
             
             const displaySize = { width: video.videoWidth, height: video.videoHeight };
             faceapi.matchDimensions(canvas, displaySize);
@@ -419,19 +412,15 @@
         }
     }
     
-    // Continuous face detection loop
-    function startDetectionLoop(video, canvas, indicator) {
-        const loop = async () => {
+    // Start periodic face detection
+    function startPeriodicDetection(video, canvas, indicator) {
+        if (detectionInterval) clearInterval(detectionInterval);
+        
+        detectionInterval = setInterval(async () => {
             if (video.videoWidth && modelsLoaded) {
-                try {
-                    await drawFaceDetection(video, canvas, indicator);
-                } catch(e) {
-                    // Silent fail
-                }
+                await detectFaceAndDraw(video, canvas, indicator);
             }
-            animationFrameId = requestAnimationFrame(loop);
-        };
-        loop();
+        }, 100);
     }
     
     async function getFaceDescriptor(videoElement) {
@@ -440,30 +429,29 @@
             return null;
         }
         
-        updateDebug(attendanceDebugDiv, "🔍 Looking for face with SSD MobileNet...");
+        updateDebug(attendanceDebugDiv, "🔍 Looking for face...");
         
-        // Try multiple times with increasing delays
-        for (let attempt = 1; attempt <= 6; attempt++) {
-            updateDebug(attendanceDebugDiv, `Attempt ${attempt}/6...`);
+        // Try multiple times
+        for (let attempt = 1; attempt <= 8; attempt++) {
+            updateDebug(attendanceDebugDiv, `Attempt ${attempt}/8...`);
             
             try {
-                // Use SSD MobileNet for detection
                 const detection = await faceapi.detectSingleFace(videoElement)
                     .withFaceLandmarks()
                     .withFaceDescriptor();
                 
                 if (detection && detection.descriptor) {
-                    updateDebug(attendanceDebugDiv, `✓ Face detected! Descriptor length: ${detection.descriptor.length}`);
+                    updateDebug(attendanceDebugDiv, `✓ Face detected!`);
                     return detection.descriptor;
                 }
             } catch(e) {
-                updateDebug(attendanceDebugDiv, `Attempt ${attempt} error: ${e.message}`, true);
+                updateDebug(attendanceDebugDiv, `Attempt ${attempt} error`, true);
             }
             
-            await new Promise(r => setTimeout(r, 600));
+            await new Promise(r => setTimeout(r, 500));
         }
         
-        updateDebug(attendanceDebugDiv, "✗ No face detected after 6 attempts", true);
+        updateDebug(attendanceDebugDiv, "✗ No face detected after 8 attempts", true);
         return null;
     }
     
@@ -476,27 +464,20 @@
         let bestMatch = null;
         let bestDistance = Infinity;
         
-        updateDebug(attendanceDebugDiv, `Comparing with ${faceDescriptorsDB.length} registered faces:`);
-        
         for (const person of faceDescriptorsDB) {
             const distance = faceapi.euclideanDistance(descriptor, person.descriptor);
-            updateDebug(attendanceDebugDiv, `  ${person.name}: ${distance.toFixed(4)}`);
-            
             if (distance < bestDistance) {
                 bestDistance = distance;
                 bestMatch = person;
             }
         }
         
-        updateDebug(attendanceDebugDiv, `Best match: ${bestMatch?.name} (distance: ${bestDistance.toFixed(4)}, threshold: ${threshold})`);
+        updateDebug(attendanceDebugDiv, `Best match: ${bestMatch?.name} (distance: ${bestDistance.toFixed(4)})`);
         
         if (bestDistance <= threshold) {
-            updateDebug(attendanceDebugDiv, `✓ Match accepted!`);
             return bestMatch;
-        } else {
-            updateDebug(attendanceDebugDiv, `✗ Match rejected (distance too high)`);
-            return null;
         }
+        return null;
     }
     
     // ==================== CAMERA SETUP ====================
@@ -511,12 +492,7 @@
             };
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             videoElement.srcObject = stream;
-            await new Promise(resolve => {
-                videoElement.onloadedmetadata = () => {
-                    videoElement.play();
-                    resolve();
-                };
-            });
+            await videoElement.play();
             return stream;
         } catch(err) {
             updateDebug(attendanceDebugDiv, `Camera error: ${err.message}`, true);
@@ -529,12 +505,14 @@
     
     async function startAttendanceCamera() {
         if (attendanceStream) attendanceStream.getTracks().forEach(t => t.stop());
+        if (detectionInterval) clearInterval(detectionInterval);
+        
         attendanceStream = await startCamera(attendanceVideo, currentAttendanceCamera);
         if (attendanceStream) {
             const info = document.getElementById('attendanceCameraInfo');
             if (info) info.innerHTML = currentAttendanceCamera === 'user' ? '🤳 Front' : '📱 Back';
             updateDebug(attendanceDebugDiv, `Camera: ${currentAttendanceCamera === 'user' ? 'Front' : 'Back'}`);
-            startDetectionLoop(attendanceVideo, attendanceCanvas, attendanceFaceIndicator);
+            startPeriodicDetection(attendanceVideo, attendanceCanvas, attendanceFaceIndicator);
             return true;
         }
         return false;
@@ -542,12 +520,13 @@
     
     async function startRegisterCamera() {
         if (registerStream) registerStream.getTracks().forEach(t => t.stop());
+        
         registerStream = await startCamera(registerVideo, currentRegisterCamera);
         if (registerStream) {
             const info = document.getElementById('registerCameraInfo');
             if (info) info.innerHTML = currentRegisterCamera === 'user' ? '🤳 Front' : '📱 Back';
             updateDebug(registerDebugDiv, `Camera: ${currentRegisterCamera === 'user' ? 'Front' : 'Back'}`);
-            startDetectionLoop(registerVideo, registerCanvas, registerFaceIndicator);
+            startPeriodicDetection(registerVideo, registerCanvas, registerFaceIndicator);
             return true;
         }
         return false;
@@ -613,7 +592,6 @@
                 attendanceResultDiv.innerHTML = `<div class="attendance-item"><span>⛪ ${match.name}</span><span class="badge">${todayStr}</span></div>` + attendanceResultDiv.innerHTML;
                 attendanceResultDiv.scrollTop = 0;
                 updateDebug(attendanceDebugDiv, `✓ Attendance marked for ${match.name}`);
-                updateStatus(attendanceStatusDiv, `✅ ${match.name} marked present!`, "success");
             } else {
                 updateStatus(attendanceStatusDiv, `⚠️ Could not mark attendance`, "error");
             }
@@ -674,7 +652,6 @@
                 updateDebug(registerDebugDiv, `Total registered faces: ${faceDescriptorsDB.length}`);
             } else {
                 updateStatus(registerStatusDiv, `❌ Failed: ${result?.error || 'Unknown'}`, "error");
-                updateDebug(registerDebugDiv, `Save failed: ${result?.error}`, true);
             }
         } catch (error) {
             updateStatus(registerStatusDiv, `Error: ${error.message}`, "error");
@@ -737,10 +714,6 @@
         
         updateDebug(attendanceDebugDiv, "🚀 Starting application...");
         
-        // Wait for TensorFlow to be ready
-        await tf.ready();
-        updateDebug(attendanceDebugDiv, `TensorFlow.js backend: ${tf.getBackend()}`);
-        
         await loadMembers();
         await loadFaceDescriptors();
         await loadModels();
@@ -751,7 +724,7 @@
     
     window.onload = init;
     window.onbeforeunload = () => {
-        if (animationFrameId) cancelAnimationFrame(animationFrameId);
+        if (detectionInterval) clearInterval(detectionInterval);
         if (attendanceStream) attendanceStream.getTracks().forEach(t => t.stop());
         if (registerStream) registerStream.getTracks().forEach(t => t.stop());
     };
