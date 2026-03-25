@@ -185,6 +185,12 @@
             border-left: 4px solid #17a2b8;
         }
         
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+            border-left: 4px solid #ffc107;
+        }
+        
         .result-area {
             background: #f8fafc;
             border-radius: 20px;
@@ -306,6 +312,11 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
@@ -376,7 +387,7 @@
         
         <div class="input-group">
             <label>👤 Full Name (as in attendance sheet)</label>
-            <input type="text" id="newUserName" placeholder="يوسف رامي سامي" autocomplete="off">
+            <input type="text" id="newUserName" placeholder="Enter full name" autocomplete="off">
         </div>
         
         <button id="captureRegister" class="btn-primary">📸 Register Face</button>
@@ -384,7 +395,7 @@
     </div>
     
     <div class="footer">
-        ⚡ Face Recognition | Auto-mark when face detected | Stable detection required
+        ⚡ Face Recognition | Auto-mark when face detected
     </div>
 </div>
 
@@ -393,8 +404,8 @@
     // REPLACE THIS WITH YOUR APPS SCRIPT URL
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbMd7ZvHyMVS_yUK6ANUEn4TYhLNe9o4hHz26q3Fp2a1yMhq6FlWSmgzvhBa4-MS2nug/exec";
     
-    const DETECTION_INTERVAL = 800; // ms between detections
-    const MARK_COOLDOWN = 4000; // ms between marks
+    const DETECTION_INTERVAL = 1000; // Check every 1 second
+    const MARK_COOLDOWN = 5000; // Wait 5 seconds between marks
     
     // ==================== GLOBALS ====================
     let modelsLoaded = false;
@@ -408,11 +419,10 @@
     let attendanceForDate = [];
     let lastMarkTime = 0;
     let lastRecognizedName = null;
-    let isProcessing = false;
     let currentAttendanceCamera = 'environment';
     let currentRegisterCamera = 'environment';
-    let detectionLoopRunning = false;
     let detectionIntervalId = null;
+    let isRegistering = false;
     
     // ==================== DOM ELEMENTS ====================
     const takeAttendanceBtn = document.getElementById('takeAttendanceBtn');
@@ -612,19 +622,39 @@
         return bestDistance <= threshold ? bestMatch : null;
     }
     
-    // Draw face bounding box safely
-    function drawFaceBox(detection, canvas, ctx) {
-        if (!detection || !detection.detection || !detection.detection.box) {
-            return false;
-        }
-        
+    // Safe function to draw face box - handles all possible result structures
+    function safeDrawFaceBox(detection, canvas, ctx) {
         try {
-            const displaySize = { width: canvas.width, height: canvas.height };
-            const resized = faceapi.resizeResults(detection.detection, displaySize);
-            const box = resized.box;
+            // Clear canvas first
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            if (box && typeof box.x === 'number' && typeof box.y === 'number') {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (!detection) return false;
+            
+            // Try different possible box locations
+            let box = null;
+            
+            // Case 1: detection has box directly
+            if (detection.box) {
+                box = detection.box;
+            }
+            // Case 2: detection has detection.box
+            else if (detection.detection && detection.detection.box) {
+                box = detection.detection.box;
+            }
+            // Case 3: detection has alignedRect.box
+            else if (detection.alignedRect && detection.alignedRect.box) {
+                box = detection.alignedRect.box;
+            }
+            // Case 4: detection has faceDetection.box
+            else if (detection.faceDetection && detection.faceDetection.box) {
+                box = detection.faceDetection.box;
+            }
+            
+            if (box && typeof box.x === 'number' && typeof box.y === 'number' && box.width && box.height) {
+                // Resize to match canvas
+                const scaleX = canvas.width / detection._inputSize?.width || canvas.width;
+                const scaleY = canvas.height / detection._inputSize?.height || canvas.height;
+                
                 ctx.strokeStyle = '#00ff00';
                 ctx.lineWidth = 2;
                 ctx.strokeRect(box.x, box.y, box.width, box.height);
@@ -649,30 +679,35 @@
                 })
             ).withFaceLandmarks().withFaceDescriptor();
             
-            // Clear canvas if no detection
+            // Draw box safely
+            safeDrawFaceBox(detection, canvas, ctx);
+            
             if (!detection) {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
                 if (indicator && !isAttendance) {
                     updateFaceIndicator(indicator, '🔍 No face', false);
                 }
                 return null;
             }
             
-            // Draw bounding box safely
-            drawFaceBox(detection, canvas, ctx);
-            
-            // Update indicator
+            // Face detected
             if (indicator) {
                 updateFaceIndicator(indicator, '✅ Face detected', true);
             }
             
-            // Recognize face if we have descriptor
+            // Get descriptor
+            let descriptor = null;
             if (detection.descriptor) {
-                const match = findBestMatch(detection.descriptor);
+                descriptor = detection.descriptor;
+            } else if (detection._descriptor) {
+                descriptor = detection._descriptor;
+            }
+            
+            if (descriptor) {
+                const match = findBestMatch(descriptor);
                 
-                // Clean up descriptor
-                if (detection.descriptor && typeof detection.descriptor.dispose === 'function') {
-                    detection.descriptor.dispose();
+                // Clean up
+                if (typeof descriptor.dispose === 'function') {
+                    descriptor.dispose();
                 }
                 
                 if (match && isAttendance && currentSelectedDate) {
@@ -702,14 +737,15 @@
             return null;
         } catch (err) {
             console.error('Detection error:', err);
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Don't clear canvas on error - keep last drawing
             return null;
         }
     }
     
     // ==================== DETECTION LOOP ====================
     async function detectionLoop() {
-        if (!attendanceVideo || !attendanceVideo.videoWidth) return;
+        if (!attendanceVideo || attendanceVideo.readyState !== 4) return;
+        if (!attendanceVideo.videoWidth || attendanceVideo.videoWidth === 0) return;
         
         await detectAndRecognize(attendanceVideo, attendanceCanvas, attendanceCtx, attendanceFaceIndicator, true);
     }
@@ -729,7 +765,7 @@
     }
     
     // ==================== CAMERA SETUP ====================
-    async function startCamera(videoElement, cameraType, canvas, ctx) {
+    async function startCamera(videoElement, cameraType, canvas) {
         try {
             if (videoElement.srcObject) {
                 videoElement.srcObject.getTracks().forEach(t => t.stop());
@@ -737,7 +773,7 @@
             
             const constraints = {
                 video: {
-                    facingMode: cameraType === 'environment' ? { exact: 'environment' } : { exact: 'user' },
+                    facingMode: cameraType,
                     width: { ideal: 640 },
                     height: { ideal: 480 }
                 }
@@ -749,46 +785,26 @@
             return new Promise((resolve) => {
                 videoElement.onloadedmetadata = () => {
                     videoElement.play();
-                    // Set canvas dimensions
-                    const rect = videoElement.parentElement.getBoundingClientRect();
-                    canvas.width = rect.width;
-                    canvas.height = rect.height;
+                    // Set canvas dimensions after video is ready
+                    setTimeout(() => {
+                        const rect = videoElement.parentElement.getBoundingClientRect();
+                        if (rect.width > 0) {
+                            canvas.width = rect.width;
+                            canvas.height = rect.height;
+                        }
+                    }, 100);
                     resolve(stream);
                 };
             });
         } catch (err) {
-            console.log('Exact facing mode failed, trying fallback:', err);
-            // Fallback without exact
-            try {
-                const constraints = {
-                    video: {
-                        facingMode: cameraType,
-                        width: { ideal: 640 },
-                        height: { ideal: 480 }
-                    }
-                };
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                videoElement.srcObject = stream;
-                
-                return new Promise((resolve) => {
-                    videoElement.onloadedmetadata = () => {
-                        videoElement.play();
-                        const rect = videoElement.parentElement.getBoundingClientRect();
-                        canvas.width = rect.width;
-                        canvas.height = rect.height;
-                        resolve(stream);
-                    };
-                });
-            } catch (err2) {
-                console.error('Camera error:', err2);
-                return null;
-            }
+            console.error('Camera error:', err);
+            return null;
         }
     }
     
     async function startAttendanceCamera() {
         if (attendanceStream) attendanceStream.getTracks().forEach(t => t.stop());
-        attendanceStream = await startCamera(attendanceVideo, currentAttendanceCamera, attendanceCanvas, attendanceCtx);
+        attendanceStream = await startCamera(attendanceVideo, currentAttendanceCamera, attendanceCanvas);
         if (attendanceStream) {
             console.log('Attendance camera started');
         }
@@ -797,7 +813,7 @@
     
     async function startRegisterCamera() {
         if (registerStream) registerStream.getTracks().forEach(t => t.stop());
-        registerStream = await startCamera(registerVideo, currentRegisterCamera, registerCanvas, registerCtx);
+        registerStream = await startCamera(registerVideo, currentRegisterCamera, registerCanvas);
         if (registerStream) {
             console.log('Register camera started');
         }
@@ -806,6 +822,8 @@
     
     // ==================== REGISTER FACE ====================
     async function registerFace() {
+        if (isRegistering) return;
+        
         const name = newUserNameInput.value.trim();
         if (!name) {
             updateStatus(registerStatus, "⚠️ Please enter your name", "error");
@@ -823,6 +841,8 @@
             await new Promise(r => setTimeout(r, 1000));
         }
         
+        isRegistering = true;
+        captureRegisterBtn.disabled = true;
         updateStatus(registerStatus, "📸 Capturing face...", "info");
         
         try {
@@ -834,12 +854,24 @@
                 })
             ).withFaceLandmarks().withFaceDescriptor();
             
-            if (!detection || !detection.descriptor) {
+            if (!detection) {
                 updateStatus(registerStatus, "😞 No face detected. Try better lighting", "error");
                 return;
             }
             
-            const descriptorArray = Array.from(detection.descriptor);
+            let descriptor = null;
+            if (detection.descriptor) {
+                descriptor = detection.descriptor;
+            } else if (detection._descriptor) {
+                descriptor = detection._descriptor;
+            }
+            
+            if (!descriptor) {
+                updateStatus(registerStatus, "😞 Could not extract face features", "error");
+                return;
+            }
+            
+            const descriptorArray = Array.from(descriptor);
             const result = await jsonpRequest('saveFace', { name, descriptor: JSON.stringify(descriptorArray) });
             
             if (result.success) {
@@ -847,18 +879,15 @@
                 updateFaceIndicator(registerFaceIndicator, `✅ Registered!`, true);
                 faceDescriptorsDB.push({ name, descriptor: new Float32Array(descriptorArray) });
                 newUserNameInput.value = '';
-                
-                // Play success sound effect (optional)
-                try {
-                    const audio = new Audio('data:audio/wav;base64,U3RlYWx0aCBpcyB0aGUgYmVzdA==');
-                    audio.play().catch(() => {});
-                } catch(e) {}
             } else {
                 updateStatus(registerStatus, `❌ Failed: ${result.error}`, "error");
             }
         } catch (error) {
             console.error('Register error:', error);
             updateStatus(registerStatus, `Error: ${error.message}`, "error");
+        } finally {
+            isRegistering = false;
+            captureRegisterBtn.disabled = false;
         }
     }
     
@@ -889,25 +918,8 @@
             return true;
         } catch (error) {
             console.error('Model load error:', error);
-            
-            // Fallback to CPU
-            try {
-                await tf.setBackend('cpu');
-                await tf.ready();
-                
-                const modelUrl = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model';
-                
-                await faceapi.nets.tinyFaceDetector.loadFromUri(modelUrl);
-                await faceapi.nets.faceLandmark68Net.loadFromUri(modelUrl);
-                await faceapi.nets.faceRecognitionNet.loadFromUri(modelUrl);
-                
-                modelsLoaded = true;
-                updateStatus(attendanceStatus, "✅ Models ready (CPU mode)", "success");
-                return true;
-            } catch (err2) {
-                updateStatus(attendanceStatus, "❌ Failed to load models", "error");
-                return false;
-            }
+            updateStatus(attendanceStatus, "❌ Failed to load models", "error");
+            return false;
         }
     }
     
