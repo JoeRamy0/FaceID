@@ -196,6 +196,17 @@
             font-size: 10px;
             z-index: 10;
         }
+        .export-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 0.5rem;
+            border-radius: 2rem;
+            font-size: 0.8rem;
+            cursor: pointer;
+            margin-top: 0.5rem;
+            width: 100%;
+        }
     </style>
 </head>
 <body>
@@ -233,6 +244,7 @@
         <div class="progress-bar"><div id="attendanceProgress" class="progress-fill"></div></div>
         <div id="attendanceResult" class="result-area"><div style="text-align:center;color:#6c757d;">📋 Attendance for selected date will appear here</div></div>
         <div id="attendanceDebug" class="debug-info"></div>
+        <button id="exportAttendanceBtn" class="export-btn">📥 Export Attendance Data</button>
     </div>
 
     <div id="registerPanel" class="panel">
@@ -254,15 +266,16 @@
         <div id="registerStatus" class="status">⏳ Loading AI models...</div>
         <div class="progress-bar"><div id="registerProgress" class="progress-fill"></div></div>
         <div id="registerDebug" class="debug-info"></div>
+        <button id="exportFacesBtn" class="export-btn">📥 Export Face Data</button>
     </div>
-    <div class="footer">🔗 Select date, then scan face to mark attendance directly in Sheet1</div>
+    <div class="footer">🔗 Data saved locally | Use Export to sync with Google Sheets</div>
 </div>
 
 <script>
     // ==================== CONFIGURATION ====================
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbMd7ZvHyMVS_yUK6ANUEn4TYhLNe9o4hHz26q3Fp2a1yMhq6FlWSmgzvhBa4-MS2nug/exec";
-    
     const SHEET_ID = '1VYIPqwlbTAA8_NvXT6pUMxIcT8f6Jq2hoayGt1UMNr0';
+    const GOOGLE_SHEETS_JSON_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=0`;
+    
     const MODEL_URL = './models';
     
     // ==================== GLOBALS ====================
@@ -299,8 +312,9 @@
     const registerFrontCam = document.getElementById('registerFrontCam');
     const registerBackCam = document.getElementById('registerBackCam');
     const attendanceDateSelect = document.getElementById('attendanceDateSelect');
+    const exportAttendanceBtn = document.getElementById('exportAttendanceBtn');
+    const exportFacesBtn = document.getElementById('exportFacesBtn');
     
-    // Helper: Format date to YYYY-MM-DD
     function formatDateToYYYYMMDD(dateValue) {
         if (!dateValue) return '';
         try {
@@ -310,21 +324,6 @@
             const month = String(d.getMonth() + 1).padStart(2, '0');
             const day = String(d.getDate()).padStart(2, '0');
             return `${year}-${month}-${day}`;
-        } catch(e) {
-            return '';
-        }
-    }
-    
-    // Helper: Format date to MM/DD/YYYY (for Apps Script compatibility)
-    function formatDateToMDY(dateValue) {
-        if (!dateValue) return '';
-        try {
-            const d = new Date(dateValue);
-            if (isNaN(d.getTime())) return '';
-            const month = d.getMonth() + 1;
-            const day = d.getDate();
-            const year = d.getFullYear();
-            return `${month}/${day}/${year}`;
         } catch(e) {
             return '';
         }
@@ -354,17 +353,13 @@
         if (element) element.style.width = percent + '%';
     }
     
-    // ==================== LOAD DATES FROM GOOGLE SHEETS (IMPROVED ALGORITHM) ====================
+    // ==================== LOAD MEMBERS AND DATES FROM GOOGLE SHEETS ====================
     async function loadSheetData() {
         try {
             updateDebug(attendanceDebugDiv, "📥 Loading data from Google Sheets...");
-            
-            // Use the published JSON URL (no CORS issues)
-            const GOOGLE_SHEETS_JSON_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=0`;
             const response = await fetch(GOOGLE_SHEETS_JSON_URL);
             const text = await response.text();
             
-            // Extract JSON from the response
             const jsonStart = text.indexOf('{');
             const jsonEnd = text.lastIndexOf('}');
             const jsonStr = text.substring(jsonStart, jsonEnd + 1);
@@ -377,23 +372,21 @@
                 throw new Error('No header row found');
             }
             
-            // Keywords to skip (non-date headers)
             const skipKeywords = [
                 'العدد', 'المجموع', 'Total', 'Sum', 'اجمالي', 'الحضور', 
                 'الغياب', 'النسبة', 'تالتة', 'رابعة', 'كشف', 'كنيسة', 
-                'مطرانية', 'الخدام', 'بنين', 'بنات'
+                'مطرانية', 'الخدام', 'بنين', 'بنات', 'المجموع'
             ];
             
             // Parse dates from header row
             dateHeaders = [];
-            let dateCount = 0;
             
             for (let i = 1; i < headerRow.c.length; i++) {
                 const cell = headerRow.c[i];
                 if (cell && cell.v) {
                     const cellValue = cell.v.toString().trim();
                     
-                    // Skip if it's a text header
+                    // Skip non-date headers
                     let shouldSkip = false;
                     for (const keyword of skipKeywords) {
                         if (cellValue === keyword || cellValue.includes(keyword)) {
@@ -407,32 +400,25 @@
                     // Try to parse as date
                     let dateValue = null;
                     
-                    // Case 1: Direct Date object
                     if (cell.v instanceof Date) {
                         dateValue = cell.v;
-                    }
-                    // Case 2: String that looks like a date
-                    else if (typeof cell.v === 'string') {
+                    } else if (typeof cell.v === 'string') {
                         const parsed = new Date(cell.v);
                         if (!isNaN(parsed.getTime())) {
                             dateValue = parsed;
                         }
-                    }
-                    // Case 3: Number (Excel serial date)
-                    else if (typeof cell.v === 'number' && cell.v > 40000 && cell.v < 60000) {
+                    } else if (typeof cell.v === 'number' && cell.v > 40000 && cell.v < 60000) {
                         dateValue = new Date((cell.v - 25569) * 86400 * 1000);
                     }
                     
                     if (dateValue && !isNaN(dateValue.getTime())) {
                         const dateStr = formatDateToYYYYMMDD(dateValue);
                         dateHeaders.push({
-                            column: i + 1, // 1-indexed column for API
+                            column: i + 1,
                             date: dateValue,
-                            dateStr: dateStr,
-                            displayStr: formatDateToMDY(dateValue)
+                            dateStr: dateStr
                         });
-                        dateCount++;
-                        updateDebug(attendanceDebugDiv, `📅 Date ${dateCount}: Column ${i+1} = ${dateStr}`);
+                        updateDebug(attendanceDebugDiv, `📅 Date found: Column ${i+1} = ${dateStr}`);
                     }
                 }
             }
@@ -453,7 +439,6 @@
             
             updateDebug(attendanceDebugDiv, `✅ Added ${dateHeaders.length} dates to dropdown`);
             
-            // Show first 5 and last 5 dates
             if (dateHeaders.length > 0) {
                 const firstDates = dateHeaders.slice(0, 5).map(d => d.dateStr).join(', ');
                 const lastDates = dateHeaders.slice(-5).map(d => d.dateStr).join(', ');
@@ -461,7 +446,7 @@
                 updateDebug(attendanceDebugDiv, `📅 Last dates: ${lastDates}`);
             }
             
-            // Load members from rows (skip header row)
+            // Load members
             const members = [];
             for (let i = 1; i < rows.length; i++) {
                 const row = rows[i];
@@ -472,7 +457,7 @@
                         !name.includes('الغياب') && !name.includes('نسبة')) {
                         members.push({
                             name: name,
-                            rowIndex: i + 1 // 1-indexed row for API
+                            rowIndex: i + 1
                         });
                     }
                 }
@@ -488,23 +473,7 @@
         }
     }
     
-    // ==================== MARK ATTENDANCE VIA APPS SCRIPT (USING GET) ====================
-    async function markAttendanceInSheet(name, rowIndex, columnIndex) {
-        try {
-            updateDebug(attendanceDebugDiv, `📤 Marking attendance for ${name} at row ${rowIndex}, column ${columnIndex}...`);
-            
-            // Use GET request to avoid CORS preflight
-            const url = `${APPS_SCRIPT_URL}?action=markAttendance&name=${encodeURIComponent(name)}&row=${rowIndex}&column=${columnIndex}`;
-            const response = await fetch(url);
-            const result = await response.json();
-            return result;
-        } catch (err) {
-            updateDebug(attendanceDebugDiv, `❌ Error: ${err.message}`, true);
-            return { success: false, error: err.message };
-        }
-    }
-    
-    // ==================== FACE DATA STORAGE (Local) ====================
+    // ==================== LOCAL STORAGE FUNCTIONS ====================
     async function loadFaceDescriptors() {
         const stored = localStorage.getItem('face_descriptors');
         if (stored) {
@@ -547,6 +516,27 @@
         }
     }
     
+    // ==================== MARK ATTENDANCE (LOCAL) ====================
+    async function markAttendanceLocal(name, selectedDate, selectedColumn) {
+        const todayStr = getLocalDate();
+        const dateStr = selectedDate;
+        
+        const stored = localStorage.getItem('attendance_log') || '[]';
+        const log = JSON.parse(stored);
+        
+        const alreadyMarked = log.some(entry => entry.name === name && entry.date === dateStr);
+        
+        if (!alreadyMarked) {
+            log.push({ name, date: dateStr, column: selectedColumn, timestamp: new Date().toISOString() });
+            localStorage.setItem('attendance_log', JSON.stringify(log));
+            updateDebug(attendanceDebugDiv, `✅ Attendance stored locally for ${name} on ${dateStr}`);
+        } else {
+            updateDebug(attendanceDebugDiv, `ℹ️ ${name} already marked for ${dateStr}`);
+        }
+        
+        return { success: true, alreadyMarked: alreadyMarked };
+    }
+    
     function displayAttendanceForDate(selectedDateStr) {
         const stored = localStorage.getItem('attendance_log') || '[]';
         const log = JSON.parse(stored);
@@ -560,6 +550,57 @@
                 attendanceResultDiv.innerHTML += `<div class="attendance-item"><span>⛪ ${entry.name}</span><span class="badge">${entry.date}</span></div>`;
             });
         }
+    }
+    
+    // Export functions
+    function exportAttendance() {
+        const stored = localStorage.getItem('attendance_log') || '[]';
+        const log = JSON.parse(stored);
+        
+        if (log.length === 0) {
+            updateDebug(attendanceDebugDiv, "⚠️ No attendance data to export", true);
+            return;
+        }
+        
+        const csvRows = [['Name', 'Date', 'Column', 'Timestamp']];
+        log.forEach(entry => {
+            csvRows.push([entry.name, entry.date, entry.column, entry.timestamp]);
+        });
+        
+        const csvContent = csvRows.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `attendance_${getLocalDate()}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        updateDebug(attendanceDebugDiv, `📥 Exported ${log.length} attendance records`);
+    }
+    
+    function exportFaces() {
+        const stored = localStorage.getItem('face_descriptors') || '[]';
+        const faces = JSON.parse(stored);
+        
+        if (faces.length === 0) {
+            updateDebug(registerDebugDiv, "⚠️ No face data to export", true);
+            return;
+        }
+        
+        const csvRows = [['Name', 'FaceDescriptor']];
+        faces.forEach(face => {
+            csvRows.push([face.name, JSON.stringify(face.descriptor)]);
+        });
+        
+        const csvContent = csvRows.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `face_descriptors_${getLocalDate()}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        updateDebug(registerDebugDiv, `📥 Exported ${faces.length} face records`);
     }
     
     // ==================== FACE RECOGNITION ====================
@@ -803,25 +844,18 @@
             
             updateStatus(attendanceStatusDiv, `✅ Recognized: ${match.name}`, "success");
             
-            const result = await markAttendanceInSheet(match.name, person.rowIndex, parseInt(selectedColumn));
+            const result = await markAttendanceLocal(match.name, selectedDateText, selectedColumn);
             
             if (result?.success) {
                 if (result.alreadyMarked) {
                     updateStatus(attendanceStatusDiv, `⚠️ ${match.name} already marked for ${selectedDateText}`, "warning");
                 } else {
                     updateStatus(attendanceStatusDiv, `✅ ${match.name} marked present for ${selectedDateText}`, "success");
-                    const stored = localStorage.getItem('attendance_log') || '[]';
-                    const log = JSON.parse(stored);
-                    const alreadyMarked = log.some(entry => entry.name === match.name && entry.date === selectedDateText);
-                    if (!alreadyMarked) {
-                        log.push({ name: match.name, date: selectedDateText, timestamp: new Date().toISOString() });
-                        localStorage.setItem('attendance_log', JSON.stringify(log));
-                    }
                     displayAttendanceForDate(selectedDateText);
                 }
                 updateDebug(attendanceDebugDiv, `✓ Attendance marked for ${match.name}`);
             } else {
-                updateStatus(attendanceStatusDiv, `⚠️ Could not mark attendance: ${result?.error}`, "error");
+                updateStatus(attendanceStatusDiv, `⚠️ Could not mark attendance`, "error");
             }
         } catch (error) {
             updateStatus(attendanceStatusDiv, `Error: ${error.message}`, "error");
@@ -934,6 +968,9 @@
         takeAttendanceBtn.onclick = () => setMode("attendance");
         registerFaceBtn.onclick = () => setMode("register");
         
+        exportAttendanceBtn.onclick = exportAttendance;
+        exportFacesBtn.onclick = exportFaces;
+        
         attendanceDateSelect.onchange = () => {
             const selectedDateText = attendanceDateSelect.options[attendanceDateSelect.selectedIndex]?.text;
             if (selectedDateText && selectedDateText !== '-- Select Date --') {
@@ -959,7 +996,8 @@
         await startAttendanceCamera();
         
         updateDebug(attendanceDebugDiv, "✅ System Ready! Select a date, then look at camera");
-        updateDebug(attendanceDebugDiv, "📌 Face data saved locally, attendance marks Sheet1 directly");
+        updateDebug(attendanceDebugDiv, "📌 All data saved locally. Use Export buttons to save to CSV.");
+        updateDebug(attendanceDebugDiv, "📅 Dates loaded: " + dateHeaders.length);
     }
     
     window.onload = init;
