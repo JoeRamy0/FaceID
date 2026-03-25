@@ -444,9 +444,18 @@
             text-align: center;
         }
         
-        .guidance-step {
-            display: inline-block;
-            margin: 0 8px;
+        .debug-panel {
+            background: #f1f5f9;
+            padding: 8px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-family: monospace;
+            margin-top: 12px;
+            display: none;
+        }
+        
+        .debug-panel.show {
+            display: block;
         }
     </style>
 </head>
@@ -529,13 +538,7 @@
         </div>
         
         <div class="guidance-panel" id="guidancePanel">
-            <span class="guidance-step">📱 Face in frame</span>
-            <span>➡️</span>
-            <span class="guidance-step">🎯 Center face</span>
-            <span>➡️</span>
-            <span class="guidance-step">⚡ Good lighting</span>
-            <span>➡️</span>
-            <span class="guidance-step">✅ Click Register</span>
+            📱 Look at camera to start
         </div>
         
         <div class="camera-selector">
@@ -552,21 +555,28 @@
         
         <button id="captureRegister" class="btn-primary">📸 Register Face</button>
         <div id="registerStatus" class="status info">Ready to register</div>
+        
+        <div id="debugPanel" class="debug-panel">
+            <strong>🔧 Debug Info:</strong><br>
+            <span id="debugModels">Models: Loading...</span><br>
+            <span id="debugCamera">Camera: Waiting...</span><br>
+            <span id="debugDetection">Detection: Waiting...</span>
+        </div>
+        <button id="showDebugBtn" style="margin-top: 8px; padding: 4px; font-size: 10px;">🔧 Show Debug</button>
     </div>
     
     <div class="footer">
-        ⚡ Smart Face Recognition | Auto-mark | Duplicate Prevention | Best Capture Guidance
+        ⚡ Smart Face Recognition | Auto-mark | Duplicate Prevention
     </div>
 </div>
 
 <script>
     // ==================== CONFIGURATION ====================
-    // REPLACE THIS WITH YOUR APPS SCRIPT URL
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbMd7ZvHyMVS_yUK6ANUEn4TYhLNe9o4hHz26q3Fp2a1yMhq6FlWSmgzvhBa4-MS2nug/exec";
     
-    const DETECTION_INTERVAL = 1000;
+    const DETECTION_INTERVAL = 500; // Faster detection for testing
     const MARK_COOLDOWN = 3000;
-    const DUPLICATE_THRESHOLD = 0.5; // Lower = stricter duplicate detection
+    const DUPLICATE_THRESHOLD = 0.5;
     
     // ==================== GLOBALS ====================
     let modelsLoaded = false;
@@ -589,6 +599,8 @@
     let autoMarkEnabled = true;
     let registerFaceQuality = 0;
     let lastDetectedDescriptor = null;
+    let modelLoadAttempts = 0;
+    let debugMode = false;
     
     // ==================== DOM ELEMENTS ====================
     const takeAttendanceBtn = document.getElementById('takeAttendanceBtn');
@@ -608,6 +620,11 @@
     const registerQualityMeter = document.getElementById('registerQualityMeter');
     const duplicateWarning = document.getElementById('duplicateWarning');
     const guidancePanel = document.getElementById('guidancePanel');
+    const debugPanel = document.getElementById('debugPanel');
+    const debugModels = document.getElementById('debugModels');
+    const debugCamera = document.getElementById('debugCamera');
+    const debugDetection = document.getElementById('debugDetection');
+    const showDebugBtn = document.getElementById('showDebugBtn');
     const attendanceFrontCam = document.getElementById('attendanceFrontCam');
     const attendanceBackCam = document.getElementById('attendanceBackCam');
     const registerFrontCam = document.getElementById('registerFrontCam');
@@ -619,23 +636,41 @@
     const absentCountSpan = document.getElementById('absentCount');
     const newUserNameInput = document.getElementById('newUserName');
     
+    // ==================== DEBUG FUNCTIONS ====================
+    function updateDebug() {
+        if (!debugMode) return;
+        debugPanel.classList.add('show');
+    }
+    
+    showDebugBtn.onclick = () => {
+        debugMode = !debugMode;
+        if (debugMode) {
+            debugPanel.classList.add('show');
+            showDebugBtn.textContent = '🔧 Hide Debug';
+        } else {
+            debugPanel.classList.remove('show');
+            showDebugBtn.textContent = '🔧 Show Debug';
+        }
+    };
+    
+    function updateDebugInfo() {
+        debugModels.textContent = `Models: ${modelsLoaded ? '✅ Loaded' : '❌ Loading...'}`;
+        debugCamera.textContent = `Camera: ${attendanceVideo && attendanceVideo.videoWidth ? '✅ Active (' + attendanceVideo.videoWidth + 'x' + attendanceVideo.videoHeight + ')' : '❌ Waiting...'}`;
+    }
+    
     // ==================== HELPER FUNCTIONS ====================
     function updateStatus(element, message, type) {
         element.textContent = message;
         element.className = `status ${type}`;
+        updateDebugInfo();
     }
     
     function updateFaceIndicator(element, message, isSuccess = false) {
         element.textContent = message;
         element.style.background = isSuccess ? 'rgba(40, 167, 69, 0.9)' : 'rgba(0,0,0,0.8)';
-        setTimeout(() => {
-            if (element.textContent === message) {
-                element.style.background = 'rgba(0,0,0,0.8)';
-            }
-        }, 2000);
     }
     
-    function updateGuidance(step, message, type = 'info') {
+    function updateGuidance(message, type = 'info') {
         guidancePanel.innerHTML = message;
         guidancePanel.style.background = type === 'success' ? 'linear-gradient(135deg, #28a745 0%, #1e7e34 100%)' : 
                                          type === 'warning' ? 'linear-gradient(135deg, #ffc107 0%, #e0a800 100%)' :
@@ -678,32 +713,6 @@
                 }
             }, 10000);
         });
-    }
-    
-    // ==================== DUPLICATE DETECTION ====================
-    function checkForDuplicateFace(descriptor) {
-        if (faceDescriptorsDB.length === 0) return null;
-        
-        let bestMatch = null;
-        let bestDistance = Infinity;
-        
-        for (const person of faceDescriptorsDB) {
-            const distance = faceapi.euclideanDistance(descriptor, person.descriptor);
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                bestMatch = person;
-            }
-        }
-        
-        if (bestDistance <= DUPLICATE_THRESHOLD) {
-            return { isDuplicate: true, name: bestMatch.name, distance: bestDistance };
-        }
-        
-        return { isDuplicate: false, distance: bestDistance };
-    }
-    
-    function checkNameExists(name) {
-        return faceDescriptorsDB.some(person => person.name.toLowerCase() === name.toLowerCase());
     }
     
     // ==================== LOAD DATA ====================
@@ -824,97 +833,129 @@
         return bestDistance <= threshold ? bestMatch : null;
     }
     
-    function safeDrawFaceBox(detection, canvas, ctx, color = '#00ff00') {
-        try {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            if (!detection) return false;
-            
-            let box = detection.box || detection.detection?.box || detection.alignedRect?.box || detection.faceDetection?.box;
-            
-            if (box && typeof box.x === 'number' && typeof box.y === 'number' && box.width && box.height) {
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 3;
-                ctx.strokeRect(box.x, box.y, box.width, box.height);
-                return true;
+    function checkForDuplicateFace(descriptor) {
+        if (faceDescriptorsDB.length === 0) return null;
+        
+        let bestMatch = null;
+        let bestDistance = Infinity;
+        
+        for (const person of faceDescriptorsDB) {
+            const distance = faceapi.euclideanDistance(descriptor, person.descriptor);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestMatch = person;
             }
-        } catch (err) {}
-        return false;
+        }
+        
+        if (bestDistance <= DUPLICATE_THRESHOLD) {
+            return { isDuplicate: true, name: bestMatch.name, distance: bestDistance };
+        }
+        
+        return { isDuplicate: false, distance: bestDistance };
     }
     
-    async function detectAndRecognize(video, canvas, ctx, indicator, updateCurrentFace = true) {
-        if (!modelsLoaded || !video || video.readyState !== 4) return null;
-        if (!video.videoWidth || video.videoWidth === 0) return null;
+    function checkNameExists(name) {
+        return faceDescriptorsDB.some(person => person.name.toLowerCase() === name.toLowerCase());
+    }
+    
+    // ==================== ATTENDANCE DETECTION ====================
+    async function detectAttendanceFace() {
+        if (!modelsLoaded || !attendanceVideo || attendanceVideo.readyState !== 4) {
+            debugDetection.textContent = 'Detection: Waiting for models/video...';
+            return null;
+        }
+        if (!attendanceVideo.videoWidth || attendanceVideo.videoWidth === 0) {
+            debugDetection.textContent = 'Detection: Video not ready...';
+            return null;
+        }
         
         try {
+            debugDetection.textContent = 'Detection: Running...';
+            
             const detection = await faceapi.detectSingleFace(
-                video,
+                attendanceVideo,
                 new faceapi.TinyFaceDetectorOptions({
                     inputSize: 224,
                     scoreThreshold: 0.5
                 })
-            ).withFaceLandmarks().withFaceDescriptor();
+            );
             
-            safeDrawFaceBox(detection, canvas, ctx);
-            
-            if (!detection) {
-                if (updateCurrentFace) {
-                    currentDetectedFace = null;
-                    detectedNameDisplay.style.display = 'none';
-                    currentFaceStatus.innerHTML = '🔍 Looking for face...';
-                    currentFaceStatus.className = 'status info';
-                }
-                return null;
-            }
-            
-            if (indicator) {
-                updateFaceIndicator(indicator, '✅ Face detected', true);
-            }
-            
-            let descriptor = detection.descriptor || detection._descriptor;
-            
-            if (descriptor) {
-                const match = findBestMatch(descriptor);
+            if (detection) {
+                debugDetection.textContent = `Detection: ✅ Face found! Score: ${Math.round(detection.score * 100)}%`;
                 
-                if (updateCurrentFace) {
+                // Draw box
+                const displaySize = { width: attendanceVideo.videoWidth, height: attendanceVideo.videoHeight };
+                faceapi.matchDimensions(attendanceCanvas, displaySize);
+                const resized = faceapi.resizeResults(detection, displaySize);
+                const box = resized.box;
+                
+                attendanceCtx.clearRect(0, 0, attendanceCanvas.width, attendanceCanvas.height);
+                attendanceCtx.strokeStyle = '#00ff00';
+                attendanceCtx.lineWidth = 2;
+                attendanceCtx.strokeRect(box.x, box.y, box.width, box.height);
+                
+                updateFaceIndicator(attendanceFaceIndicator, '✅ Face detected', true);
+                
+                // Get descriptor for recognition
+                const fullDetection = await faceapi.detectSingleFace(
+                    attendanceVideo,
+                    new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
+                ).withFaceLandmarks().withFaceDescriptor();
+                
+                if (fullDetection && fullDetection.descriptor) {
+                    const match = findBestMatch(fullDetection.descriptor);
+                    
                     if (match) {
                         currentDetectedFace = match;
                         detectedNameDisplay.style.display = 'block';
                         detectedNameDisplay.innerHTML = `👤 ${match.name}`;
                         currentFaceStatus.innerHTML = `✅ Detected: ${match.name}`;
                         currentFaceStatus.className = 'status success';
+                        debugDetection.textContent = `Detection: ✅ Recognized as ${match.name}`;
+                        
+                        if (autoMarkEnabled && currentSelectedDate) {
+                            const now = Date.now();
+                            if (now - lastAutoMarkTime > MARK_COOLDOWN) {
+                                lastAutoMarkTime = now;
+                                await markAttendance(match.name, currentSelectedDate);
+                                await loadAttendanceForDate(currentSelectedDate);
+                            }
+                        }
                     } else {
                         currentDetectedFace = null;
                         detectedNameDisplay.style.display = 'none';
                         currentFaceStatus.innerHTML = '❓ Face not registered';
                         currentFaceStatus.className = 'status warning';
+                        debugDetection.textContent = 'Detection: ❌ Face found but not registered';
+                    }
+                    
+                    if (typeof fullDetection.descriptor.dispose === 'function') {
+                        fullDetection.descriptor.dispose();
                     }
                 }
                 
-                if (autoMarkEnabled && match && currentSelectedDate && updateCurrentFace) {
-                    const now = Date.now();
-                    if (now - lastAutoMarkTime > MARK_COOLDOWN) {
-                        lastAutoMarkTime = now;
-                        await markAttendance(match.name, currentSelectedDate);
-                        await loadAttendanceForDate(currentSelectedDate);
-                    }
-                }
-                
-                if (typeof descriptor.dispose === 'function') {
-                    descriptor.dispose();
-                }
-                
-                return match;
+                return detection;
+            } else {
+                attendanceCtx.clearRect(0, 0, attendanceCanvas.width, attendanceCanvas.height);
+                updateFaceIndicator(attendanceFaceIndicator, '🔍 No face', false);
+                currentDetectedFace = null;
+                detectedNameDisplay.style.display = 'none';
+                currentFaceStatus.innerHTML = '🔍 Looking for face...';
+                currentFaceStatus.className = 'status info';
+                debugDetection.textContent = 'Detection: ❌ No face detected';
+                return null;
             }
-            
-            return null;
         } catch (err) {
+            console.error('Detection error:', err);
+            debugDetection.textContent = `Detection: Error - ${err.message}`;
             return null;
         }
     }
     
-    // ==================== SMART REGISTRATION WITH GUIDANCE ====================
-    async function showRegisterFaceDetection() {
+    // ==================== REGISTRATION DETECTION ====================
+    async function detectRegisterFace() {
         if (!modelsLoaded || !registerVideo || registerVideo.readyState !== 4) return;
+        if (!registerVideo.videoWidth || registerVideo.videoWidth === 0) return;
         
         try {
             const detection = await faceapi.detectSingleFace(
@@ -923,7 +964,7 @@
                     inputSize: 224,
                     scoreThreshold: 0.5
                 })
-            ).withFaceLandmarks().withFaceDescriptor();
+            );
             
             registerCtx.clearRect(0, 0, registerCanvas.width, registerCanvas.height);
             
@@ -938,152 +979,61 @@
                 const sizeRatio = faceArea / frameArea;
                 registerFaceQuality = sizeRatio;
                 
-                let boxColor, qualityMessage, canRegister, guidanceMsg;
-                let qualityScore = 0;
+                let boxColor, canRegister;
                 
-                // Check lighting (based on detection confidence)
-                const confidence = detection.score || 0;
-                const hasGoodLighting = confidence > 0.7;
-                
-                // Check face centering
-                const centerX = box.x + box.width / 2;
-                const centerY = box.y + box.height / 2;
-                const isCentered = Math.abs(centerX - registerCanvas.width/2) < registerCanvas.width/4 &&
-                                   Math.abs(centerY - registerCanvas.height/2) < registerCanvas.height/4;
-                
-                // Calculate overall quality score (0-100)
-                qualityScore = Math.min(100, 
-                    (sizeRatio * 200) + // Size: 0-15% = 0-30 points, 15%+ = 30 points
-                    (confidence * 30) + // Confidence: 0-100% = 0-30 points
-                    (isCentered ? 20 : 0) + // Centered: 20 points
-                    (hasGoodLighting ? 20 : 0) // Good lighting: 20 points
-                );
-                
-                // Determine status based on quality
-                if (qualityScore >= 80 && sizeRatio > 0.12) {
+                if (sizeRatio > 0.12) {
                     boxColor = '#00ff00';
-                    qualityMessage = '✅ PERFECT! Ready to register';
                     canRegister = true;
-                    guidanceMsg = '✅ Perfect capture! Click Register now';
-                    updateGuidance('step4', guidanceMsg, 'success');
-                    updateStatus(registerStatus, "✅ Perfect! Click Register", "success");
+                    updateGuidance('✅ Perfect! Click Register now', 'success');
+                    updateStatus(registerStatus, "✅ Perfect position! Ready to register", "success");
                     updateFaceIndicator(registerFaceIndicator, "✅ Ready!", true);
-                } 
-                else if (qualityScore >= 60 && sizeRatio > 0.08) {
-                    boxColor = '#88ff88';
-                    qualityMessage = '👍 Good position. Slight improvements needed';
-                    canRegister = false;
-                    
-                    if (sizeRatio < 0.12) guidanceMsg = '📱 Move a bit closer to camera';
-                    else if (!hasGoodLighting) guidanceMsg = '💡 Turn on more light or face the light';
-                    else if (!isCentered) guidanceMsg = '🎯 Center your face in the frame';
-                    else guidanceMsg = '👍 Almost perfect! Hold steady';
-                    
-                    updateGuidance('step3', guidanceMsg, 'warning');
-                    updateStatus(registerStatus, guidanceMsg, "warning");
-                    updateFaceIndicator(registerFaceIndicator, "⚠️ " + guidanceMsg, false);
-                }
-                else if (sizeRatio > 0.05) {
+                } else if (sizeRatio > 0.06) {
                     boxColor = '#ffaa00';
-                    qualityMessage = '⚠️ Move closer and center your face';
                     canRegister = false;
-                    
-                    if (sizeRatio < 0.08) guidanceMsg = '📱 Move MUCH closer to camera';
-                    else if (!hasGoodLighting) guidanceMsg = '💡 Lighting is poor - find better light';
-                    else guidanceMsg = '🎯 Center your face in the frame';
-                    
-                    updateGuidance('step2', guidanceMsg, 'warning');
-                    updateStatus(registerStatus, guidanceMsg, "warning");
-                    updateFaceIndicator(registerFaceIndicator, "⚠️ " + guidanceMsg, false);
-                }
-                else {
+                    updateGuidance('⚠️ Move closer to camera', 'warning');
+                    updateStatus(registerStatus, "⚠️ Move closer to camera", "warning");
+                    updateFaceIndicator(registerFaceIndicator, "⚠️ Move closer", false);
+                } else {
                     boxColor = '#ff5555';
-                    qualityMessage = '❌ Too far! Move closer to camera';
                     canRegister = false;
-                    updateGuidance('step1', '📱 Move closer so your face fills the frame', 'warning');
+                    updateGuidance('📱 Move MUCH closer to camera', 'warning');
                     updateStatus(registerStatus, "📱 Move closer to camera", "info");
-                    updateFaceIndicator(registerFaceIndicator, "🔍 Move closer", false);
+                    updateFaceIndicator(registerFaceIndicator, "📱 Move closer", false);
                 }
                 
-                // Store descriptor for duplicate check
-                if (detection.descriptor) {
-                    lastDetectedDescriptor = detection.descriptor;
-                    
-                    // Check for duplicate face
-                    const duplicateCheck = checkForDuplicateFace(detection.descriptor);
-                    if (duplicateCheck.isDuplicate && qualityScore > 50) {
-                        duplicateWarning.style.display = 'block';
-                        duplicateWarning.className = 'status warning';
-                        duplicateWarning.innerHTML = `⚠️ WARNING: This face looks similar to "${duplicateCheck.name}" (match: ${Math.round((1 - duplicateCheck.distance) * 100)}%). If this is a different person, improve lighting and try again.`;
-                        canRegister = false;
-                    } else {
-                        duplicateWarning.style.display = 'none';
-                    }
-                    
-                    // Check if name already exists (when name is entered)
-                    const nameEntered = newUserNameInput.value.trim();
-                    if (nameEntered && checkNameExists(nameEntered)) {
-                        duplicateWarning.style.display = 'block';
-                        duplicateWarning.className = 'status error';
-                        duplicateWarning.innerHTML = `⚠️ ERROR: The name "${nameEntered}" is already registered! Please use a different name.`;
-                        canRegister = false;
-                    }
-                }
-                
-                // Draw face box with quality color
                 registerCtx.strokeStyle = boxColor;
                 registerCtx.lineWidth = 3;
                 registerCtx.strokeRect(box.x, box.y, box.width, box.height);
                 
-                // Draw face landmarks
-                if (detection.landmarks) {
-                    const landmarks = faceapi.resizeResults(detection.landmarks, displaySize);
-                    
-                    // Draw eyes (green)
-                    const leftEye = landmarks.getLeftEye();
-                    const rightEye = landmarks.getRightEye();
-                    
-                    registerCtx.fillStyle = '#ffff00';
-                    leftEye.forEach(point => {
-                        registerCtx.beginPath();
-                        registerCtx.arc(point.x, point.y, 3, 0, 2 * Math.PI);
-                        registerCtx.fill();
-                    });
-                    
-                    registerCtx.fillStyle = '#ffff00';
-                    rightEye.forEach(point => {
-                        registerCtx.beginPath();
-                        registerCtx.arc(point.x, point.y, 3, 0, 2 * Math.PI);
-                        registerCtx.fill();
-                    });
-                    
-                    // Draw other landmarks
-                    registerCtx.fillStyle = '#88ff88';
-                    landmarks.positions.forEach(point => {
-                        registerCtx.beginPath();
-                        registerCtx.arc(point.x, point.y, 1.5, 0, 2 * Math.PI);
-                        registerCtx.fill();
-                    });
-                }
-                
-                // Draw quality text
-                registerCtx.font = 'bold 14px Arial';
-                registerCtx.fillStyle = boxColor;
-                registerCtx.shadowBlur = 0;
-                registerCtx.fillText(qualityMessage, box.x, box.y - 10);
-                
-                // Draw quality meter
                 if (registerQualityMeter) {
                     registerQualityMeter.style.display = 'block';
-                    let qualityPercent = Math.min(100, Math.max(0, Math.round(qualityScore)));
-                    registerQualityMeter.innerHTML = `🎯 Quality: ${qualityPercent}% | 📏 Size: ${Math.round(sizeRatio * 100)}%`;
-                    
-                    let meterColor = qualityPercent >= 80 ? '#4caf50' : (qualityPercent >= 60 ? '#ffaa00' : '#ff5555');
-                    registerQualityMeter.style.color = meterColor;
-                    registerQualityMeter.style.background = 'rgba(0,0,0,0.8)';
+                    registerQualityMeter.innerHTML = `📏 Size: ${Math.round(sizeRatio * 100)}% | ${canRegister ? '✅ Ready' : '⚠️ Move closer'}`;
+                    registerQualityMeter.style.color = boxColor;
                 }
                 
                 captureRegisterBtn.disabled = !canRegister;
+                
+                // Check for duplicate if we have full detection
+                const fullDetection = await faceapi.detectSingleFace(
+                    registerVideo,
+                    new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
+                ).withFaceDescriptor();
+                
+                if (fullDetection && fullDetection.descriptor) {
+                    const duplicateCheck = checkForDuplicateFace(fullDetection.descriptor);
+                    if (duplicateCheck.isDuplicate && sizeRatio > 0.1) {
+                        duplicateWarning.style.display = 'block';
+                        duplicateWarning.className = 'status warning';
+                        duplicateWarning.innerHTML = `⚠️ WARNING: This face matches "${duplicateCheck.name}"!`;
+                        captureRegisterBtn.disabled = true;
+                    } else {
+                        duplicateWarning.style.display = 'none';
+                    }
+                    
+                    if (typeof fullDetection.descriptor.dispose === 'function') {
+                        fullDetection.descriptor.dispose();
+                    }
+                }
                 
             } else {
                 registerCtx.clearRect(0, 0, registerCanvas.width, registerCanvas.height);
@@ -1094,9 +1044,9 @@
                 registerCtx.fillText('🔍 No Face Detected', registerCanvas.width/2 - 90, registerCanvas.height/2);
                 registerCtx.shadowBlur = 0;
                 
+                updateGuidance('📱 Look at the camera to start', 'info');
                 updateStatus(registerStatus, "😞 No face detected. Look at camera", "warning");
                 updateFaceIndicator(registerFaceIndicator, "🔍 No face - look at camera", false);
-                updateGuidance('step1', '📱 Look at the camera to start', 'info');
                 captureRegisterBtn.disabled = true;
                 registerFaceQuality = 0;
                 if (registerQualityMeter) registerQualityMeter.style.display = 'none';
@@ -1108,61 +1058,32 @@
         }
     }
     
-    function startRegisterDetectionLoop() {
-        if (registerDetectionInterval) clearInterval(registerDetectionInterval);
-        registerDetectionInterval = setInterval(() => {
-            showRegisterFaceDetection();
-        }, 150);
-    }
-    
-    function stopRegisterDetectionLoop() {
-        if (registerDetectionInterval) {
-            clearInterval(registerDetectionInterval);
-            registerDetectionInterval = null;
-        }
-    }
-    
-    // ==================== MANUAL MARK ====================
-    async function manualMark() {
-        if (isManualMarking) return;
-        if (!currentSelectedDate) {
-            updateStatus(attendanceStatus, "⚠️ Please select a date first", "warning");
-            return;
-        }
-        if (!currentDetectedFace) {
-            updateStatus(attendanceStatus, "😞 No face detected. Please look at camera", "warning");
-            return;
-        }
-        
-        isManualMarking = true;
-        manualMarkBtn.disabled = true;
-        
-        await markAttendance(currentDetectedFace.name, currentSelectedDate);
-        await loadAttendanceForDate(currentSelectedDate);
-        
-        isManualMarking = false;
-        manualMarkBtn.disabled = false;
-    }
-    
-    // ==================== DETECTION LOOP ====================
-    async function detectionLoop() {
-        if (!attendanceVideo || attendanceVideo.readyState !== 4) return;
-        if (!attendanceVideo.videoWidth || attendanceVideo.videoWidth === 0) return;
-        
-        await detectAndRecognize(attendanceVideo, attendanceCanvas, attendanceCtx, attendanceFaceIndicator, true);
-    }
-    
-    function startDetectionLoop() {
+    // ==================== DETECTION LOOPS ====================
+    function startAttendanceLoop() {
         if (detectionIntervalId) clearInterval(detectionIntervalId);
-        detectionIntervalId = setInterval(() => {
-            detectionLoop();
+        detectionIntervalId = setInterval(async () => {
+            await detectAttendanceFace();
         }, DETECTION_INTERVAL);
     }
     
-    function stopDetectionLoop() {
+    function startRegisterLoop() {
+        if (registerDetectionInterval) clearInterval(registerDetectionInterval);
+        registerDetectionInterval = setInterval(async () => {
+            await detectRegisterFace();
+        }, 150);
+    }
+    
+    function stopAttendanceLoop() {
         if (detectionIntervalId) {
             clearInterval(detectionIntervalId);
             detectionIntervalId = null;
+        }
+    }
+    
+    function stopRegisterLoop() {
+        if (registerDetectionInterval) {
+            clearInterval(registerDetectionInterval);
+            registerDetectionInterval = null;
         }
     }
     
@@ -1193,12 +1114,14 @@
                             canvas.width = rect.width;
                             canvas.height = rect.height;
                         }
-                    }, 100);
-                    resolve(stream);
+                        debugCamera.textContent = `Camera: ✅ Active (${videoElement.videoWidth}x${videoElement.videoHeight})`;
+                        resolve(stream);
+                    }, 500);
                 };
             });
         } catch (err) {
             console.error('Camera error:', err);
+            debugCamera.textContent = `Camera: ❌ Error - ${err.message}`;
             return null;
         }
     }
@@ -1213,12 +1136,12 @@
         if (registerStream) registerStream.getTracks().forEach(t => t.stop());
         registerStream = await startCamera(registerVideo, currentRegisterCamera, registerCanvas);
         if (registerStream) {
-            startRegisterDetectionLoop();
+            startRegisterLoop();
         }
         return !!registerStream;
     }
     
-    // ==================== SMART REGISTER FACE ====================
+    // ==================== REGISTER FACE ====================
     async function registerFace() {
         if (isRegistering) return;
         
@@ -1228,17 +1151,16 @@
             return;
         }
         
-        // Check if name already exists
         if (checkNameExists(name)) {
-            updateStatus(registerStatus, `❌ The name "${name}" is already registered!`, "error");
+            updateStatus(registerStatus, `❌ Name "${name}" already exists!`, "error");
             duplicateWarning.style.display = 'block';
             duplicateWarning.className = 'status error';
-            duplicateWarning.innerHTML = `⚠️ ERROR: "${name}" is already registered! Please use a different name.`;
+            duplicateWarning.innerHTML = `⚠️ "${name}" is already registered!`;
             return;
         }
         
-        if (registerFaceQuality < 0.12) {
-            updateStatus(registerStatus, "❌ Please move closer to camera so your face fills more of the frame", "error");
+        if (registerFaceQuality < 0.1) {
+            updateStatus(registerStatus, "❌ Please move closer to camera", "error");
             return;
         }
         
@@ -1248,47 +1170,37 @@
             if (!modelsLoaded) return;
         }
         
-        if (!registerVideo.videoWidth) {
-            await startRegisterCamera();
-            await new Promise(r => setTimeout(r, 1000));
-        }
-        
-        // Get current detection with descriptor
-        const detection = await faceapi.detectSingleFace(
-            registerVideo,
-            new faceapi.TinyFaceDetectorOptions({
-                inputSize: 224,
-                scoreThreshold: 0.5
-            })
-        ).withFaceLandmarks().withFaceDescriptor();
-        
-        if (!detection || !detection.descriptor) {
-            updateStatus(registerStatus, "😞 No face detected. Try again", "error");
-            return;
-        }
-        
-        // Final duplicate check
-        const duplicateCheck = checkForDuplicateFace(detection.descriptor);
-        if (duplicateCheck.isDuplicate) {
-            updateStatus(registerStatus, `❌ This face looks like "${duplicateCheck.name}" (${Math.round((1 - duplicateCheck.distance) * 100)}% match). If this is a different person, improve lighting and try again.`, "error");
-            duplicateWarning.style.display = 'block';
-            duplicateWarning.className = 'status error';
-            duplicateWarning.innerHTML = `⚠️ This face matches existing registration for "${duplicateCheck.name}"! Cannot register duplicate.`;
-            return;
-        }
-        
         isRegistering = true;
         captureRegisterBtn.disabled = true;
-        updateStatus(registerStatus, "📸 Capturing and saving face...", "info");
+        updateStatus(registerStatus, "📸 Capturing face...", "info");
         
         try {
+            const detection = await faceapi.detectSingleFace(
+                registerVideo,
+                new faceapi.TinyFaceDetectorOptions({
+                    inputSize: 224,
+                    scoreThreshold: 0.5
+                })
+            ).withFaceDescriptor();
+            
+            if (!detection || !detection.descriptor) {
+                updateStatus(registerStatus, "😞 No face detected. Try again", "error");
+                return;
+            }
+            
+            const duplicateCheck = checkForDuplicateFace(detection.descriptor);
+            if (duplicateCheck.isDuplicate) {
+                updateStatus(registerStatus, `❌ This face looks like "${duplicateCheck.name}"!`, "error");
+                return;
+            }
+            
             const descriptorArray = Array.from(detection.descriptor);
             const result = await jsonpRequest('saveFace', { name, descriptor: JSON.stringify(descriptorArray) });
             
             if (result.success) {
-                updateStatus(registerStatus, `✅ Successfully registered ${name}!`, "success");
+                updateStatus(registerStatus, `✅ Registered ${name}!`, "success");
                 updateFaceIndicator(registerFaceIndicator, `✅ ${name} registered!`, true);
-                updateGuidance('complete', `✅ ${name} registered successfully!`, 'success');
+                updateGuidance(`✅ ${name} registered successfully!`, 'success');
                 
                 registerCtx.fillStyle = 'rgba(0, 255, 0, 0.3)';
                 registerCtx.fillRect(0, 0, registerCanvas.width, registerCanvas.height);
@@ -1313,8 +1225,10 @@
     // ==================== LOAD MODELS ====================
     async function loadModels() {
         updateStatus(attendanceStatus, "📥 Loading AI models...", "info");
+        debugModels.textContent = "Models: Loading...";
         
         try {
+            // Try WebGL first
             await tf.setBackend('webgl');
             await tf.ready();
             
@@ -1325,13 +1239,47 @@
             await faceapi.nets.faceRecognitionNet.loadFromUri(modelUrl);
             
             modelsLoaded = true;
+            debugModels.textContent = "Models: ✅ Loaded!";
             updateStatus(attendanceStatus, "✅ Models ready!", "success");
             updateStatus(registerStatus, "✅ Models ready!", "success");
             return true;
         } catch (error) {
+            console.error('Model load error:', error);
+            debugModels.textContent = `Models: ❌ Error - ${error.message}`;
             updateStatus(attendanceStatus, "❌ Failed to load models", "error");
+            
+            // Retry with CPU
+            if (modelLoadAttempts < 2) {
+                modelLoadAttempts++;
+                updateStatus(attendanceStatus, "Retrying with CPU backend...", "info");
+                await tf.setBackend('cpu');
+                await tf.ready();
+                return loadModels();
+            }
             return false;
         }
+    }
+    
+    // ==================== MANUAL MARK ====================
+    async function manualMark() {
+        if (isManualMarking) return;
+        if (!currentSelectedDate) {
+            updateStatus(attendanceStatus, "⚠️ Please select a date first", "warning");
+            return;
+        }
+        if (!currentDetectedFace) {
+            updateStatus(attendanceStatus, "😞 No face detected. Please look at camera", "warning");
+            return;
+        }
+        
+        isManualMarking = true;
+        manualMarkBtn.disabled = true;
+        
+        await markAttendance(currentDetectedFace.name, currentSelectedDate);
+        await loadAttendanceForDate(currentSelectedDate);
+        
+        isManualMarking = false;
+        manualMarkBtn.disabled = false;
     }
     
     // ==================== MODE SWITCHING ====================
@@ -1345,10 +1293,10 @@
                 registerStream.getTracks().forEach(t => t.stop()); 
                 registerStream = null;
             }
-            stopRegisterDetectionLoop();
+            stopRegisterLoop();
             startAttendanceCamera();
-            startDetectionLoop();
-            updateGuidance('attendance', '📸 Look at camera for attendance marking', 'info');
+            startAttendanceLoop();
+            updateGuidance('📸 Look at camera for attendance marking', 'info');
         } else {
             attendancePanel.classList.remove('active-panel');
             registerPanel.classList.add('active-panel');
@@ -1357,9 +1305,9 @@
             if (attendanceStream) { 
                 attendanceStream.getTracks().forEach(t => t.stop()); 
             }
-            stopDetectionLoop();
+            stopAttendanceLoop();
             startRegisterCamera();
-            updateGuidance('register', '📱 Follow the guidance below to register your face', 'info');
+            updateGuidance('📱 Follow the guidance below to register your face', 'info');
         }
     }
     
@@ -1440,15 +1388,18 @@
         await loadModels();
         await loadAllData();
         await startAttendanceCamera();
-        startDetectionLoop();
+        startAttendanceLoop();
         
         updateStatus(attendanceStatus, "📱 Ready! Auto-mark is ON. Look at camera or click button", "success");
+        
+        // Periodic debug update
+        setInterval(updateDebugInfo, 1000);
     }
     
     window.onload = init;
     window.onbeforeunload = () => {
-        stopDetectionLoop();
-        stopRegisterDetectionLoop();
+        stopAttendanceLoop();
+        stopRegisterLoop();
         if (attendanceStream) attendanceStream.getTracks().forEach(t => t.stop());
         if (registerStream) registerStream.getTracks().forEach(t => t.stop());
     };
