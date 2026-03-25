@@ -83,7 +83,7 @@
             margin-top: 0.5rem;
         }
         .btn-capture:active { transform: scale(0.97);}
-        .btn-capture:disabled { background: #95a5a6; cursor: not-allowed; }
+        .btn-capture:disabled { background: #95a5a6; cursor: not-allowed; opacity: 0.6; }
         .camera-selector {
             display: flex;
             gap: 0.5rem;
@@ -215,6 +215,12 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .retry-btn {
+            background: #ffc107;
+            color: #333;
+            margin-top: 10px;
+        }
+        .retry-btn:hover { background: #e0a800; }
     </style>
 </head>
 <body>
@@ -243,11 +249,12 @@
         <div class="date-selector">
             <label>📅 Select Date for Attendance</label>
             <select id="attendanceDateSelect">
-                <option value="">-- Loading dates... --</option>
+                <option value="">-- Select Date --</option>
             </select>
         </div>
         
         <button id="captureAttendance" class="btn-capture">🔍 Recognize & Mark Attendance</button>
+        <button id="retryDataBtn" class="btn-capture retry-btn">🔄 Retry Loading Data</button>
         <div id="attendanceStatus" class="status">⏳ Loading AI models...</div>
         <div class="progress-bar"><div id="attendanceProgress" class="progress-fill"></div></div>
         <div id="attendanceResult" class="result-area"><div style="text-align:center;color:#6c757d;">📋 Attendance for selected date will appear here</div></div>
@@ -288,11 +295,11 @@
     let membersList = [];
     let faceDescriptorsDB = [];
     let dateList = [];
-    let attendanceCache = {}; // Cache for attendance status
     let isProcessing = false;
     let currentAttendanceCamera = 'user';
     let currentRegisterCamera = 'user';
     let detectionInterval = null;
+    let dataLoaded = false;
     
     // UI Elements
     const takeAttendanceBtn = document.getElementById('takeAttendanceBtn');
@@ -301,6 +308,7 @@
     const registerPanelDiv = document.getElementById('registerPanel');
     const captureAttendanceBtn = document.getElementById('captureAttendance');
     const captureRegisterBtn = document.getElementById('captureRegister');
+    const retryDataBtn = document.getElementById('retryDataBtn');
     const attendanceStatusDiv = document.getElementById('attendanceStatus');
     const registerStatusDiv = document.getElementById('registerStatus');
     const attendanceResultDiv = document.getElementById('attendanceResult');
@@ -352,7 +360,6 @@
     
     // ==================== JSONP REQUEST ====================
     let jsonpCounter = 0;
-    let pendingRequests = new Map();
     
     function jsonpRequest(action, params = {}) {
         return new Promise((resolve, reject) => {
@@ -365,12 +372,13 @@
                 url.searchParams.append(key, value);
             }
             
+            updateDebug(attendanceDebugDiv, `JSONP Request: ${action}`, 'info');
+            
             window[callbackName] = function(data) {
                 delete window[callbackName];
                 if (document.body.contains(script)) {
                     document.body.removeChild(script);
                 }
-                pendingRequests.delete(callbackName);
                 resolve(data);
             };
             
@@ -381,11 +389,9 @@
                 if (document.body.contains(script)) {
                     document.body.removeChild(script);
                 }
-                pendingRequests.delete(callbackName);
-                reject(new Error('JSONP script failed to load'));
+                reject(new Error(`JSONP failed for ${action}`));
             };
             
-            pendingRequests.set(callbackName, script);
             document.body.appendChild(script);
             
             setTimeout(() => {
@@ -394,10 +400,9 @@
                     if (document.body.contains(script)) {
                         document.body.removeChild(script);
                     }
-                    pendingRequests.delete(callbackName);
-                    reject(new Error('JSONP timeout'));
+                    reject(new Error(`Timeout for ${action}`));
                 }
-            }, 10000);
+            }, 15000);
         });
     }
     
@@ -412,13 +417,12 @@
         }
     }
     
-    // ==================== LOAD ALL ATTENDANCE FOR A DATE (ONE REQUEST) ====================
+    // ==================== LOAD ALL ATTENDANCE FOR A DATE ====================
     async function loadAllAttendanceForDate(date) {
         if (!date) return [];
         
         try {
             updateDebug(attendanceDebugDiv, `📊 Loading attendance for ${date}...`, 'info');
-            // Get all members with their attendance status in one request
             const result = await callAppsScript('getAttendanceForDate', { date: date });
             
             if (result.success && result.attendance) {
@@ -440,9 +444,14 @@
             updateDebug(attendanceDebugDiv, "📅 Loading dates...", 'info');
             const result = await callAppsScript('getDatesWithColumns');
             
-            if (result.success && result.dates) {
+            if (result.success && result.dates && result.dates.length > 0) {
                 dateList = result.dates;
                 updateDebug(attendanceDebugDiv, `✅ Found ${dateList.length} dates`, 'success');
+                
+                // Log first few dates
+                dateList.slice(0, 5).forEach(d => {
+                    updateDebug(attendanceDebugDiv, `  Date: ${d.date} (column ${d.column})`, 'info');
+                });
                 
                 attendanceDateSelect.innerHTML = '<option value="">-- Select Date --</option>';
                 dateList.forEach(dateInfo => {
@@ -453,10 +462,13 @@
                 });
                 return true;
             } else {
-                throw new Error(result.error || 'Failed to load dates');
+                updateDebug(attendanceDebugDiv, `⚠️ No dates found: ${result.error || 'empty response'}`, 'warning');
+                attendanceDateSelect.innerHTML = '<option value="">-- No dates available --</option>';
+                return false;
             }
         } catch (err) {
             updateDebug(attendanceDebugDiv, `❌ Error loading dates: ${err.message}`, 'error');
+            attendanceDateSelect.innerHTML = '<option value="">-- Error loading dates --</option>';
             return false;
         }
     }
@@ -467,17 +479,47 @@
             updateDebug(attendanceDebugDiv, "👥 Loading members...", 'info');
             const result = await callAppsScript('getMembers');
             
-            if (result.success && result.members) {
+            if (result.success && result.members && result.members.length > 0) {
                 membersList = result.members;
                 updateDebug(attendanceDebugDiv, `✅ Loaded ${membersList.length} members`, 'success');
+                
+                // Log first few members
+                membersList.slice(0, 5).forEach(m => {
+                    updateDebug(attendanceDebugDiv, `  Member: ${m.name}`, 'info');
+                });
                 return true;
             } else {
-                throw new Error(result.error || 'Failed to load members');
+                updateDebug(attendanceDebugDiv, `⚠️ No members found: ${result.error || 'empty response'}`, 'warning');
+                return false;
             }
         } catch (err) {
             updateDebug(attendanceDebugDiv, `❌ Error loading members: ${err.message}`, 'error');
             return false;
         }
+    }
+    
+    // ==================== LOAD ALL DATA ====================
+    async function loadAllData() {
+        updateDebug(attendanceDebugDiv, "🔄 Loading all data...", 'info');
+        captureAttendanceBtn.disabled = true;
+        
+        const datesLoaded = await loadDates();
+        const membersLoaded = await loadMembers();
+        
+        dataLoaded = datesLoaded && membersLoaded;
+        
+        if (dataLoaded) {
+            updateDebug(attendanceDebugDiv, "✅ All data loaded successfully!", 'success');
+            updateStatus(attendanceStatusDiv, "✅ Ready! Select a date and look at camera", "success");
+            captureAttendanceBtn.disabled = false;
+        } else {
+            updateDebug(attendanceDebugDiv, "⚠️ Some data failed to load. Click 'Retry Loading Data' to try again.", 'warning');
+            updateStatus(attendanceStatusDiv, "⚠️ Data loading incomplete. Click 'Retry' button.", "warning");
+            captureAttendanceBtn.disabled = false; // Still enable button but show warning
+        }
+        
+        updateDebug(attendanceDebugDiv, `📊 Dates: ${dateList.length}`, datesLoaded ? 'success' : 'error');
+        updateDebug(attendanceDebugDiv, `👥 Members: ${membersList.length}`, membersLoaded ? 'success' : 'error');
     }
     
     // ==================== LOAD FACE DESCRIPTORS ====================
@@ -490,7 +532,9 @@
                     name: f.name, 
                     descriptor: new Float32Array(f.descriptor) 
                 }));
-                updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} faces`, 'success');
+                updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} faces from storage`, 'success');
+            } else {
+                updateDebug(attendanceDebugDiv, `📭 No face descriptors found in storage`, 'info');
             }
             return true;
         } catch(e) {
@@ -535,8 +579,6 @@
                     return { success: true, alreadyMarked: true };
                 } else {
                     updateDebug(attendanceDebugDiv, `✅ ${name} marked present`, 'success');
-                    // Clear cache for this date
-                    delete attendanceCache[date];
                     return { success: true };
                 }
             } else {
@@ -591,7 +633,7 @@
             setTimeout(() => updateProgress(attendanceProgress, 0), 1000);
             return true;
         } catch(e) {
-            updateDebug(attendanceDebugDiv, `ERROR: ${e.message}`, 'error');
+            updateDebug(attendanceDebugDiv, `ERROR loading models: ${e.message}`, 'error');
             updateStatus(attendanceStatusDiv, `❌ Failed: ${e.message}`, "error");
             return false;
         }
@@ -613,7 +655,10 @@
     }
     
     function findBestMatch(descriptor, threshold = 0.6) {
-        if (faceDescriptorsDB.length === 0) return null;
+        if (faceDescriptorsDB.length === 0) {
+            updateDebug(attendanceDebugDiv, "No face descriptors in database", 'warning');
+            return null;
+        }
         
         let bestMatch = null;
         let bestDistance = Infinity;
@@ -626,13 +671,14 @@
             }
         }
         
+        updateDebug(attendanceDebugDiv, `Best match: ${bestMatch?.name} (distance: ${bestDistance.toFixed(4)})`, bestDistance <= threshold ? 'success' : 'warning');
         return bestDistance <= threshold ? bestMatch : null;
     }
     
     // ==================== CAMERA ====================
     async function startCamera(videoElement, cameraType) {
         try {
-            const constraints = { video: { facingMode: { exact: cameraType }, width: 1280, height: 720 } };
+            const constraints = { video: { facingMode: { exact: cameraType }, width: 640, height: 480 } };
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             videoElement.srcObject = stream;
             return new Promise((resolve) => {
@@ -640,7 +686,7 @@
             });
         } catch(err) {
             try {
-                const constraints = { video: { facingMode: cameraType, width: 1280, height: 720 } };
+                const constraints = { video: { facingMode: cameraType, width: 640, height: 480 } };
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 videoElement.srcObject = stream;
                 return new Promise((resolve) => {
@@ -677,12 +723,24 @@
     async function takeAttendance() {
         const selectedDate = attendanceDateSelect.value;
         if (!selectedDate) {
-            updateStatus(attendanceStatusDiv, "⚠️ Select a date first", "warning");
+            updateStatus(attendanceStatusDiv, "⚠️ Please select a date first", "warning");
             return;
         }
         
-        if (isProcessing) return;
-        if (!modelsLoaded) { await loadModels(); if (!modelsLoaded) return; }
+        if (isProcessing) {
+            updateStatus(attendanceStatusDiv, "⏳ Please wait...", "warning");
+            return;
+        }
+        
+        if (!modelsLoaded) { 
+            updateStatus(attendanceStatusDiv, "📥 Loading models...", "info");
+            await loadModels(); 
+            if (!modelsLoaded) {
+                updateStatus(attendanceStatusDiv, "❌ Models failed to load", "error");
+                return;
+            }
+        }
+        
         if (!attendanceVideo.videoWidth) {
             await startAttendanceCamera();
             setTimeout(() => takeAttendance(), 1500);
@@ -696,19 +754,21 @@
         try {
             const detection = await getFaceWithDescriptor(attendanceVideo);
             if (!detection || !detection.descriptor) {
-                updateStatus(attendanceStatusDiv, "😞 No face detected", "error");
+                updateStatus(attendanceStatusDiv, "😞 No face detected. Try better lighting!", "error");
                 return;
             }
             
+            updateStatus(attendanceStatusDiv, "🧠 Matching...", "info");
             const match = findBestMatch(detection.descriptor, 0.6);
+            
             if (!match) {
-                updateStatus(attendanceStatusDiv, "❌ Face not registered", "error");
+                updateStatus(attendanceStatusDiv, "❌ Face not registered. Please register first.", "error");
                 return;
             }
             
             const person = membersList.find(m => m.name === match.name);
             if (!person) {
-                updateStatus(attendanceStatusDiv, `❌ ${match.name} not found`, "error");
+                updateStatus(attendanceStatusDiv, `❌ ${match.name} not found in member list`, "error");
                 return;
             }
             
@@ -717,14 +777,17 @@
             
             if (result.success) {
                 if (result.alreadyMarked) {
-                    updateStatus(attendanceStatusDiv, `⚠️ ${match.name} already marked`, "warning");
+                    updateStatus(attendanceStatusDiv, `⚠️ ${match.name} already marked for this date`, "warning");
                 } else {
-                    updateStatus(attendanceStatusDiv, `✅ ${match.name} marked`, "success");
+                    updateStatus(attendanceStatusDiv, `✅ ${match.name} marked present!`, "success");
                     await displayAttendanceForDate(selectedDate);
                 }
+            } else {
+                updateStatus(attendanceStatusDiv, `❌ Failed to mark: ${result.error}`, "error");
             }
         } catch (error) {
             updateStatus(attendanceStatusDiv, `Error: ${error.message}`, "error");
+            updateDebug(attendanceDebugDiv, `Error: ${error.message}`, 'error');
         } finally {
             isProcessing = false;
             captureAttendanceBtn.disabled = false;
@@ -736,11 +799,15 @@
         
         const name = newUserNameInput.value.trim();
         if (!name) {
-            updateStatus(registerStatusDiv, "⚠️ Enter name", "error");
+            updateStatus(registerStatusDiv, "⚠️ Please enter name", "error");
             return;
         }
         
-        if (!modelsLoaded) { await loadModels(); if (!modelsLoaded) return; }
+        if (!modelsLoaded) { 
+            await loadModels(); 
+            if (!modelsLoaded) return; 
+        }
+        
         if (!registerVideo.videoWidth) {
             await startRegisterCamera();
             setTimeout(() => registerFace(), 1500);
@@ -754,21 +821,23 @@
         try {
             const detection = await getFaceWithDescriptor(registerVideo);
             if (!detection || !detection.descriptor) {
-                updateStatus(registerStatusDiv, "😞 No face detected", "error");
+                updateStatus(registerStatusDiv, "😞 No face detected. Try better lighting!", "error");
                 return;
             }
             
+            updateStatus(registerStatusDiv, "💾 Saving...", "info");
             const result = await saveFaceToLocal(name, detection.descriptor);
             
             if (result.success) {
                 updateStatus(registerStatusDiv, `✅ Registered ${name}!`, "success");
-                updateDebug(registerDebugDiv, `✓ Registered ${name}`, 'success');
+                updateDebug(registerDebugDiv, `✓ Successfully registered ${name}`, 'success');
                 newUserNameInput.value = '';
             } else {
-                updateStatus(registerStatusDiv, `❌ Failed to save`, "error");
+                updateStatus(registerStatusDiv, `❌ Failed to save: ${result.error}`, "error");
             }
         } catch (error) {
             updateStatus(registerStatusDiv, `Error: ${error.message}`, "error");
+            updateDebug(registerDebugDiv, `Error: ${error.message}`, 'error');
         } finally {
             isProcessing = false;
             captureRegisterBtn.disabled = false;
@@ -822,12 +891,15 @@
         
         captureAttendanceBtn.onclick = takeAttendance;
         captureRegisterBtn.onclick = registerFace;
+        retryDataBtn.onclick = loadAllData;
         takeAttendanceBtn.onclick = () => setMode("attendance");
         registerFaceBtn.onclick = () => setMode("register");
         
         attendanceDateSelect.onchange = async () => {
             const selectedDate = attendanceDateSelect.value;
-            if (selectedDate) await displayAttendanceForDate(selectedDate);
+            if (selectedDate && selectedDate !== '') {
+                await displayAttendanceForDate(selectedDate);
+            }
         };
         
         updateDebug(attendanceDebugDiv, "🚀 Starting application...", 'info');
@@ -835,24 +907,24 @@
         try {
             await tf.setBackend('webgl');
             await tf.ready();
-            updateDebug(attendanceDebugDiv, `🚀 Engine: WebGL`, 'success');
+            updateDebug(attendanceDebugDiv, `🚀 Engine: WebGL (Fast Mode)`, 'success');
         } catch (e) {
             await tf.setBackend('cpu');
             await tf.ready();
-            updateDebug(attendanceDebugDiv, `⚠️ Engine: CPU`, 'warning');
+            updateDebug(attendanceDebugDiv, `⚠️ Engine: CPU (Slow Mode)`, 'warning');
         }
         
         await loadFaceDescriptors();
         await loadModels();
         await startAttendanceCamera();
         
-        const datesLoaded = await loadDates();
-        const membersLoaded = await loadMembers();
+        // Load all data
+        await loadAllData();
         
-        updateDebug(attendanceDebugDiv, "✅ System Ready!", 'success');
-        updateDebug(attendanceDebugDiv, `📊 Dates: ${dateList.length}`, datesLoaded ? 'success' : 'error');
-        updateDebug(attendanceDebugDiv, `👥 Members: ${membersList.length}`, membersLoaded ? 'success' : 'error');
-        updateDebug(attendanceDebugDiv, `👤 Faces: ${faceDescriptorsDB.length}`, 'info');
+        updateDebug(attendanceDebugDiv, "✅ System Ready! Select a date, then look at camera", 'success');
+        
+        // Enable button after all loading
+        captureAttendanceBtn.disabled = false;
     }
     
     window.onload = init;
