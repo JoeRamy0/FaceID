@@ -265,7 +265,53 @@
     // ==================== CONFIGURATION ====================
     // IMPORTANT: Replace this with your NEW deployed Apps Script URL after redeploying
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbMd7ZvHyMVS_yUK6ANUEn4TYhLNe9o4hHz26q3Fp2a1yMhq6FlWSmgzvhBa4-MS2nug/exec";
+    //-----------------------------------
+        // ==================== JSONP FUNCTION (BYPASSES CORS) ====================
+    let jsonpCounter = 0;
     
+    function jsonpRequest(action, params = {}) {
+        return new Promise((resolve, reject) => {
+            const callbackName = `jsonp_callback_${++jsonpCounter}_${Date.now()}`;
+            const url = new URL(APPS_SCRIPT_URL);
+            url.searchParams.append('action', action);
+            url.searchParams.append('callback', callbackName);
+            
+            for (const [key, value] of Object.entries(params)) {
+                url.searchParams.append(key, value);
+            }
+            
+            window[callbackName] = function(data) {
+                delete window[callbackName];
+                if (document.body.contains(script)) {
+                    document.body.removeChild(script);
+                }
+                resolve(data);
+            };
+            
+            const script = document.createElement('script');
+            script.src = url.toString();
+            script.onerror = () => {
+                delete window[callbackName];
+                if (document.body.contains(script)) {
+                    document.body.removeChild(script);
+                }
+                reject(new Error('JSONP request failed'));
+            };
+            
+            document.body.appendChild(script);
+            
+            // Timeout after 15 seconds
+            setTimeout(() => {
+                if (window[callbackName]) {
+                    delete window[callbackName];
+                    if (document.body.contains(script)) {
+                        document.body.removeChild(script);
+                    }
+                    reject(new Error('JSONP timeout'));
+                }
+            }, 15000);
+        });
+    }
     // ==================== GLOBALS ====================
     let modelsLoaded = false;
     let attendanceVideo, attendanceCanvas, registerVideo, registerCanvas;
@@ -339,22 +385,14 @@
     }
     
     // ==================== API CALLS TO APPS SCRIPT ====================
+     // ==================== API CALLS TO APPS SCRIPT (USING JSONP) ====================
     async function callAppsScript(action, params = {}) {
-        let url = `${APPS_SCRIPT_URL}?action=${action}`;
-        for (const [key, value] of Object.entries(params)) {
-            url += `&${key}=${encodeURIComponent(value)}`;
-        }
-        
-        updateDebug(attendanceDebugDiv, `Calling: ${action}`, 'info');
+        updateDebug(attendanceDebugDiv, `Calling: ${action} via JSONP...`, 'info');
         
         try {
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            const data = await response.json();
-            updateDebug(attendanceDebugDiv, `${action} response: ${JSON.stringify(data).substring(0, 100)}`, 'success');
-            return data;
+            const result = await jsonpRequest(action, params);
+            updateDebug(attendanceDebugDiv, `${action} response received`, 'success');
+            return result;
         } catch (error) {
             updateDebug(attendanceDebugDiv, `${action} failed: ${error.message}`, 'error');
             return { success: false, error: error.message };
