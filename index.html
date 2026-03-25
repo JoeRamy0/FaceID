@@ -18,7 +18,7 @@
             padding: 20px;
         }
         .app-container {
-            max-width: 650px;
+            max-width: 700px;
             width: 100%;
             background: rgba(255,255,255,0.95);
             border-radius: 2rem;
@@ -196,9 +196,11 @@
             font-size: 10px;
             z-index: 10;
         }
-        .debug-success { color: #155724; background: #d4edda; }
-        .debug-error { color: #721c24; background: #f8d7da; }
-        .debug-warning { color: #856404; background: #fff3cd; }
+        .test-btn {
+            background: #6c757d;
+            margin-top: 10px;
+        }
+        .test-btn:hover { background: #5a6268; }
     </style>
 </head>
 <body>
@@ -232,6 +234,7 @@
         </div>
         
         <button id="captureAttendance" class="btn-capture">🔍 Recognize & Mark Attendance</button>
+        <button id="testApiBtn" class="btn-capture test-btn">🧪 Test API Connection</button>
         <div id="attendanceStatus" class="status">⏳ Loading AI models...</div>
         <div class="progress-bar"><div id="attendanceProgress" class="progress-fill"></div></div>
         <div id="attendanceResult" class="result-area"><div style="text-align:center;color:#6c757d;">📋 Attendance for selected date will appear here</div></div>
@@ -263,68 +266,20 @@
 
 <script>
     // ==================== CONFIGURATION ====================
-    // IMPORTANT: Replace this with your NEW deployed Apps Script URL after redeploying
+    // !!! IMPORTANT: Replace this with your ACTUAL deployed Apps Script URL !!!
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbMd7ZvHyMVS_yUK6ANUEn4TYhLNe9o4hHz26q3Fp2a1yMhq6FlWSmgzvhBa4-MS2nug/exec";
-    //-----------------------------------
-        // ==================== JSONP FUNCTION (BYPASSES CORS) ====================
-    let jsonpCounter = 0;
     
-    function jsonpRequest(action, params = {}) {
-        return new Promise((resolve, reject) => {
-            const callbackName = `jsonp_callback_${++jsonpCounter}_${Date.now()}`;
-            const url = new URL(APPS_SCRIPT_URL);
-            url.searchParams.append('action', action);
-            url.searchParams.append('callback', callbackName);
-            
-            for (const [key, value] of Object.entries(params)) {
-                url.searchParams.append(key, value);
-            }
-            
-            window[callbackName] = function(data) {
-                delete window[callbackName];
-                if (document.body.contains(script)) {
-                    document.body.removeChild(script);
-                }
-                resolve(data);
-            };
-            
-            const script = document.createElement('script');
-            script.src = url.toString();
-            script.onerror = () => {
-                delete window[callbackName];
-                if (document.body.contains(script)) {
-                    document.body.removeChild(script);
-                }
-                reject(new Error('JSONP request failed'));
-            };
-            
-            document.body.appendChild(script);
-            
-            // Timeout after 15 seconds
-            setTimeout(() => {
-                if (window[callbackName]) {
-                    delete window[callbackName];
-                    if (document.body.contains(script)) {
-                        document.body.removeChild(script);
-                    }
-                    reject(new Error('JSONP timeout'));
-                }
-            }, 15000);
-        });
-    }
     // ==================== GLOBALS ====================
     let modelsLoaded = false;
     let attendanceVideo, attendanceCanvas, registerVideo, registerCanvas;
     let attendanceStream = null, registerStream = null;
     let membersList = [];
     let faceDescriptorsDB = [];
-    let dateList = []; // Store {date, column}
+    let dateList = [];
     let isProcessing = false;
     let currentAttendanceCamera = 'user';
     let currentRegisterCamera = 'user';
     let detectionInterval = null;
-    let currentSelectedDate = null;
-    let currentSelectedColumn = null;
     
     // UI Elements
     const takeAttendanceBtn = document.getElementById('takeAttendanceBtn');
@@ -333,6 +288,7 @@
     const registerPanelDiv = document.getElementById('registerPanel');
     const captureAttendanceBtn = document.getElementById('captureAttendance');
     const captureRegisterBtn = document.getElementById('captureRegister');
+    const testApiBtn = document.getElementById('testApiBtn');
     const attendanceStatusDiv = document.getElementById('attendanceStatus');
     const registerStatusDiv = document.getElementById('registerStatus');
     const attendanceResultDiv = document.getElementById('attendanceResult');
@@ -349,10 +305,22 @@
     const registerBackCam = document.getElementById('registerBackCam');
     const attendanceDateSelect = document.getElementById('attendanceDateSelect');
     
-    function formatDateArabic(dateStr) {
-        const date = new Date(dateStr);
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+    function updateDebug(element, message, type = 'info') {
+        const timestamp = new Date().toLocaleTimeString();
+        let prefix = '📌';
+        let style = '';
+        if (type === 'error') { prefix = '❌'; style = 'color:#721c24;'; }
+        else if (type === 'success') { prefix = '✅'; style = 'color:#155724;'; }
+        else if (type === 'warning') { prefix = '⚠️'; style = 'color:#856404;'; }
+        else { prefix = 'ℹ️'; }
+        
+        const newEntry = `<div style="${style} padding:2px 0;">${prefix} [${timestamp}] ${message}</div>`;
+        element.innerHTML = newEntry + element.innerHTML;
+        
+        if (element.children.length > 50) {
+            while (element.children.length > 50) element.removeChild(element.children[element.children.length - 1]);
+        }
+        console.log(message);
     }
     
     function updateStatus(element, message, type = 'info') {
@@ -360,38 +328,101 @@
         element.className = 'status ' + type;
     }
     
-    function updateDebug(element, message, type = 'info') {
-        const timestamp = new Date().toLocaleTimeString();
-        let prefix = 'ℹ️';
-        let className = '';
-        if (type === 'error') { prefix = '❌'; className = 'debug-error'; }
-        else if (type === 'success') { prefix = '✅'; className = 'debug-success'; }
-        else if (type === 'warning') { prefix = '⚠️'; className = 'debug-warning'; }
-        else { prefix = '📌'; }
-        
-        const newEntry = `<div class="${className}" style="padding:2px 0;">${prefix} [${timestamp}] ${message}</div>`;
-        element.innerHTML = newEntry + element.innerHTML;
-        
-        // Keep last 30 entries
-        const lines = element.children;
-        if (lines.length > 30) {
-            while (lines.length > 30) element.removeChild(lines[lines.length - 1]);
-        }
-        console.log(message);
-    }
-    
     function updateProgress(element, percent) {
         if (element) element.style.width = percent + '%';
     }
     
-    // ==================== API CALLS TO APPS SCRIPT ====================
-     // ==================== API CALLS TO APPS SCRIPT (USING JSONP) ====================
+    function formatDateArabic(dateStr) {
+        const date = new Date(dateStr);
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+    }
+    
+    // ==================== DIRECT FETCH TEST (WITH CORS) ====================
+    async function testDirectFetch() {
+        updateDebug(attendanceDebugDiv, "🧪 Testing direct fetch to Apps Script...", 'info');
+        try {
+            const url = `${APPS_SCRIPT_URL}?action=getSheetInfo`;
+            updateDebug(attendanceDebugDiv, `Fetching: ${url}`, 'info');
+            
+            const response = await fetch(url);
+            updateDebug(attendanceDebugDiv, `Response status: ${response.status}`, 'info');
+            
+            const text = await response.text();
+            updateDebug(attendanceDebugDiv, `Response text: ${text.substring(0, 500)}`, 'info');
+            
+            try {
+                const data = JSON.parse(text);
+                updateDebug(attendanceDebugDiv, `✅ Parse successful! Dates found: ${data.totalDates || 0}`, 'success');
+                return data;
+            } catch (e) {
+                updateDebug(attendanceDebugDiv, `❌ Failed to parse JSON: ${e.message}`, 'error');
+                return null;
+            }
+        } catch (error) {
+            updateDebug(attendanceDebugDiv, `❌ Fetch failed: ${error.message}`, 'error');
+            return null;
+        }
+    }
+    
+    // ==================== JSONP REQUEST ====================
+    let jsonpCounter = 0;
+    
+    function jsonpRequest(action, params = {}) {
+        return new Promise((resolve, reject) => {
+            const callbackName = `jsonp_callback_${++jsonpCounter}_${Date.now()}`;
+            const url = new URL(APPS_SCRIPT_URL);
+            url.searchParams.append('action', action);
+            url.searchParams.append('callback', callbackName);
+            
+            for (const [key, value] of Object.entries(params)) {
+                url.searchParams.append(key, value);
+            }
+            
+            updateDebug(attendanceDebugDiv, `JSONP URL: ${url.toString().substring(0, 100)}...`, 'info');
+            
+            window[callbackName] = function(data) {
+                updateDebug(attendanceDebugDiv, `JSONP callback received for ${action}`, 'success');
+                delete window[callbackName];
+                if (document.body.contains(script)) {
+                    document.body.removeChild(script);
+                }
+                resolve(data);
+            };
+            
+            const script = document.createElement('script');
+            script.src = url.toString();
+            script.onerror = () => {
+                updateDebug(attendanceDebugDiv, `JSONP script load error for ${action}`, 'error');
+                delete window[callbackName];
+                if (document.body.contains(script)) {
+                    document.body.removeChild(script);
+                }
+                reject(new Error('JSONP script failed to load'));
+            };
+            
+            document.body.appendChild(script);
+            
+            setTimeout(() => {
+                if (window[callbackName]) {
+                    updateDebug(attendanceDebugDiv, `JSONP timeout for ${action} after 15s`, 'error');
+                    delete window[callbackName];
+                    if (document.body.contains(script)) {
+                        document.body.removeChild(script);
+                    }
+                    reject(new Error('JSONP timeout'));
+                }
+            }, 15000);
+        });
+    }
+    
+    // ==================== API CALLS ====================
     async function callAppsScript(action, params = {}) {
         updateDebug(attendanceDebugDiv, `Calling: ${action} via JSONP...`, 'info');
         
         try {
             const result = await jsonpRequest(action, params);
-            updateDebug(attendanceDebugDiv, `${action} response received`, 'success');
+            updateDebug(attendanceDebugDiv, `${action} completed successfully`, 'success');
             return result;
         } catch (error) {
             updateDebug(attendanceDebugDiv, `${action} failed: ${error.message}`, 'error');
@@ -399,19 +430,16 @@
         }
     }
     
-    // ==================== LOAD DATES FROM APPS SCRIPT ====================
+    // ==================== LOAD DATA ====================
     async function loadDates() {
         try {
             updateDebug(attendanceDebugDiv, "📅 Loading dates from Apps Script...", 'info');
             const result = await callAppsScript('getDatesWithColumns');
             
-            updateDebug(attendanceDebugDiv, `getDatesWithColumns result: ${JSON.stringify(result).substring(0, 200)}`, 'info');
-            
             if (result.success && result.dates) {
                 dateList = result.dates;
                 updateDebug(attendanceDebugDiv, `✅ Found ${dateList.length} dates`, 'success');
                 
-                // Log all dates for debugging
                 dateList.forEach((d, idx) => {
                     updateDebug(attendanceDebugDiv, `  Date ${idx + 1}: ${d.date} (column ${d.column})`, 'info');
                 });
@@ -420,7 +448,6 @@
                 dateList.forEach(dateInfo => {
                     const option = document.createElement('option');
                     option.value = dateInfo.date;
-                    option.dataset.column = dateInfo.column;
                     option.textContent = formatDateArabic(dateInfo.date);
                     attendanceDateSelect.appendChild(option);
                 });
@@ -436,7 +463,6 @@
         }
     }
     
-    // ==================== LOAD MEMBERS FROM APPS SCRIPT ====================
     async function loadMembers() {
         try {
             updateDebug(attendanceDebugDiv, "👥 Loading members from Apps Script...", 'info');
@@ -446,13 +472,9 @@
                 membersList = result.members;
                 updateDebug(attendanceDebugDiv, `✅ Loaded ${membersList.length} members`, 'success');
                 
-                // Log first few members
                 membersList.slice(0, 5).forEach(m => {
                     updateDebug(attendanceDebugDiv, `  Member: ${m.name} (row ${m.rowIndex})`, 'info');
                 });
-                if (membersList.length > 5) {
-                    updateDebug(attendanceDebugDiv, `  ... and ${membersList.length - 5} more`, 'info');
-                }
                 return true;
             } else {
                 throw new Error(result.error || 'Failed to load members');
@@ -463,7 +485,6 @@
         }
     }
     
-    // ==================== LOAD FACE DESCRIPTORS ====================
     async function loadFaceDescriptors() {
         try {
             const stored = localStorage.getItem('face_descriptors');
@@ -473,9 +494,9 @@
                     name: f.name, 
                     descriptor: new Float32Array(f.descriptor) 
                 }));
-                updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} face descriptors from local storage`, 'success');
+                updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} face descriptors`, 'success');
             } else {
-                updateDebug(attendanceDebugDiv, `📭 No face descriptors found in local storage`, 'warning');
+                updateDebug(attendanceDebugDiv, `📭 No face descriptors found`, 'warning');
             }
             return true;
         } catch(e) {
@@ -484,54 +505,6 @@
         }
     }
     
-    // ==================== SAVE FACE TO LOCAL ====================
-    async function saveFaceToLocal(name, descriptorArray) {
-        try {
-            const newDesc = { name, descriptor: Array.from(descriptorArray) };
-            const existing = faceDescriptorsDB.map(f => ({ name: f.name, descriptor: Array.from(f.descriptor) }));
-            const idx = existing.findIndex(f => f.name === name);
-            if (idx !== -1) existing[idx] = newDesc;
-            else existing.push(newDesc);
-            
-            localStorage.setItem('face_descriptors', JSON.stringify(existing));
-            
-            const newDescFloat = { name, descriptor: new Float32Array(descriptorArray) };
-            const memIdx = faceDescriptorsDB.findIndex(f => f.name === name);
-            if (memIdx !== -1) faceDescriptorsDB[memIdx] = newDescFloat;
-            else faceDescriptorsDB.push(newDescFloat);
-            
-            updateDebug(registerDebugDiv, `✅ Face saved locally for ${name}`, 'success');
-            return { success: true };
-        } catch (err) {
-            updateDebug(registerDebugDiv, `❌ Error saving face: ${err.message}`, 'error');
-            return { success: false, error: err.message };
-        }
-    }
-    
-    // ==================== MARK ATTENDANCE ====================
-    async function markAttendance(name, date) {
-        try {
-            updateDebug(attendanceDebugDiv, `📤 Marking attendance for ${name} on ${date}...`, 'info');
-            const result = await callAppsScript('markAttendance', { name: name, date: date });
-            
-            if (result.success) {
-                if (result.alreadyMarked) {
-                    updateDebug(attendanceDebugDiv, `⚠️ ${name} already marked for ${date}`, 'warning');
-                    return { success: true, alreadyMarked: true };
-                } else {
-                    updateDebug(attendanceDebugDiv, `✅ ${name} marked present for ${date}`, 'success');
-                    return { success: true };
-                }
-            } else {
-                throw new Error(result.error);
-            }
-        } catch (error) {
-            updateDebug(attendanceDebugDiv, `❌ Error marking attendance: ${error.message}`, 'error');
-            return { success: false, error: error.message };
-        }
-    }
-    
-    // ==================== CHECK ATTENDANCE STATUS ====================
     async function checkAttendanceStatus(name, date) {
         try {
             const result = await callAppsScript('getAttendanceStatus', { name: name, date: date });
@@ -544,35 +517,46 @@
         }
     }
     
-    // ==================== LOAD ATTENDANCE FOR DATE ====================
+    async function markAttendance(name, date) {
+        try {
+            updateDebug(attendanceDebugDiv, `📤 Marking attendance for ${name} on ${date}...`, 'info');
+            const result = await callAppsScript('markAttendance', { name: name, date: date });
+            
+            if (result.success) {
+                if (result.alreadyMarked) {
+                    updateDebug(attendanceDebugDiv, `⚠️ ${name} already marked`, 'warning');
+                    return { success: true, alreadyMarked: true };
+                } else {
+                    updateDebug(attendanceDebugDiv, `✅ ${name} marked present`, 'success');
+                    return { success: true };
+                }
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (error) {
+            updateDebug(attendanceDebugDiv, `❌ Error: ${error.message}`, 'error');
+            return { success: false, error: error.message };
+        }
+    }
+    
     async function loadAttendanceForDate(date) {
         if (!date) {
-            attendanceResultDiv.innerHTML = '<div style="text-align:center;color:#6c757d;">📋 Select a date to view attendance</div>';
+            attendanceResultDiv.innerHTML = '<div style="text-align:center;color:#6c757d;">📋 Select a date</div>';
             return;
         }
         
-        attendanceResultDiv.innerHTML = '<div style="text-align:center;">⏳ Loading attendance...</div>';
+        attendanceResultDiv.innerHTML = '<div style="text-align:center;">⏳ Loading...</div>';
         
         const presentMembers = [];
-        let checked = 0;
-        
         for (const member of membersList) {
             const isPresent = await checkAttendanceStatus(member.name, date);
-            if (isPresent) {
-                presentMembers.push(member.name);
-            }
-            checked++;
-            if (checked % 10 === 0) {
-                updateDebug(attendanceDebugDiv, `Checked ${checked}/${membersList.length} members`, 'info');
-            }
+            if (isPresent) presentMembers.push(member.name);
         }
         
-        updateDebug(attendanceDebugDiv, `✅ Found ${presentMembers.length}/${membersList.length} present on ${date}`, 'success');
-        
         if (presentMembers.length === 0) {
-            attendanceResultDiv.innerHTML = '<div style="text-align:center;color:#6c757d;">📋 No attendance recorded for this date</div>';
+            attendanceResultDiv.innerHTML = '<div style="text-align:center;color:#6c757d;">📋 No attendance recorded</div>';
         } else {
-            let html = `<div style="margin-bottom:10px;"><strong>✅ Present (${presentMembers.length}/${membersList.length})</strong></div>`;
+            let html = `<div><strong>✅ Present (${presentMembers.length}/${membersList.length})</strong></div>`;
             presentMembers.forEach(name => {
                 html += `<div class="attendance-item"><span>⛪ ${name}</span><span class="badge">Present</span></div>`;
             });
@@ -588,28 +572,20 @@
         updateProgress(attendanceProgress, 10);
         
         try {
-            updateDebug(attendanceDebugDiv, `Loading face-api models from CDN...`, 'info');
-            
             await faceapi.nets.ssdMobilenetv1.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model');
             updateProgress(attendanceProgress, 40);
-            updateDebug(attendanceDebugDiv, "✓ SSD MobileNet loaded", 'success');
-            
             await faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model');
             updateProgress(attendanceProgress, 70);
-            updateDebug(attendanceDebugDiv, "✓ Face Landmark loaded", 'success');
-            
             await faceapi.nets.faceRecognitionNet.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model');
             updateProgress(attendanceProgress, 100);
-            updateDebug(attendanceDebugDiv, "✓ Face Recognition loaded", 'success');
             
             modelsLoaded = true;
             updateStatus(attendanceStatusDiv, "✅ Models ready!", "success");
             updateStatus(registerStatusDiv, "✅ Models ready!", "success");
-            
             setTimeout(() => updateProgress(attendanceProgress, 0), 1000);
             return true;
         } catch(e) {
-            updateDebug(attendanceDebugDiv, `ERROR loading models: ${e.message}`, 'error');
+            updateDebug(attendanceDebugDiv, `ERROR: ${e.message}`, 'error');
             updateStatus(attendanceStatusDiv, `❌ Failed: ${e.message}`, "error");
             return false;
         }
@@ -623,14 +599,10 @@
                 const detection = await faceapi.detectSingleFace(video)
                     .withFaceLandmarks()
                     .withFaceDescriptor();
-                if (detection && detection.descriptor) {
-                    updateDebug(attendanceDebugDiv, `Face detected on attempt ${attempt}`, 'success');
-                    return detection;
-                }
+                if (detection && detection.descriptor) return detection;
             } catch(e) {}
             await new Promise(r => setTimeout(r, 500));
         }
-        updateDebug(attendanceDebugDiv, `No face detected after 6 attempts`, 'warning');
         return null;
     }
     
@@ -648,48 +620,28 @@
             }
         }
         
-        updateDebug(attendanceDebugDiv, `Best match: ${bestMatch?.name} (distance: ${bestDistance.toFixed(4)})`, bestDistance <= threshold ? 'success' : 'warning');
         return bestDistance <= threshold ? bestMatch : null;
     }
     
-    // ==================== CAMERA SETUP ====================
+    // ==================== CAMERA ====================
     async function startCamera(videoElement, cameraType) {
         try {
-            const constraints = { 
-                video: { 
-                    facingMode: { exact: cameraType },
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                } 
-            };
+            const constraints = { video: { facingMode: { exact: cameraType }, width: 1280, height: 720 } };
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             videoElement.srcObject = stream;
             return new Promise((resolve) => {
-                videoElement.onloadedmetadata = () => {
-                    videoElement.play();
-                    resolve(stream);
-                };
+                videoElement.onloadedmetadata = () => { videoElement.play(); resolve(stream); };
             });
         } catch(err) {
-            // Fallback without exact
             try {
-                const constraints = { 
-                    video: { 
-                        facingMode: cameraType,
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    } 
-                };
+                const constraints = { video: { facingMode: cameraType, width: 1280, height: 720 } };
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 videoElement.srcObject = stream;
                 return new Promise((resolve) => {
-                    videoElement.onloadedmetadata = () => {
-                        videoElement.play();
-                        resolve(stream);
-                    };
+                    videoElement.onloadedmetadata = () => { videoElement.play(); resolve(stream); };
                 });
             } catch(err2) {
-                updateDebug(attendanceDebugDiv, "Camera Error: " + err2.message, 'error');
+                updateDebug(attendanceDebugDiv, `Camera Error: ${err2.message}`, 'error');
                 return null;
             }
         }
@@ -697,11 +649,8 @@
     
     async function startAttendanceCamera() {
         if (attendanceStream) attendanceStream.getTracks().forEach(t => t.stop());
-        
         attendanceStream = await startCamera(attendanceVideo, currentAttendanceCamera);
         if (attendanceStream) {
-            const info = document.getElementById('attendanceCameraInfo');
-            if (info) info.innerHTML = currentAttendanceCamera === 'user' ? '🤳 Front' : '📱 Back';
             updateDebug(attendanceDebugDiv, `Camera started (${currentAttendanceCamera})`, 'success');
             return true;
         }
@@ -710,55 +659,24 @@
     
     async function startRegisterCamera() {
         if (registerStream) registerStream.getTracks().forEach(t => t.stop());
-        
         registerStream = await startCamera(registerVideo, currentRegisterCamera);
         if (registerStream) {
-            const info = document.getElementById('registerCameraInfo');
-            if (info) info.innerHTML = currentRegisterCamera === 'user' ? '🤳 Front' : '📱 Back';
-            updateDebug(registerDebugDiv, `Camera started (${currentRegisterCamera})`, 'success');
+            updateDebug(registerDebugDiv, `Camera started`, 'success');
             return true;
         }
         return false;
     }
     
-    function switchAttendanceCamera(cameraType) {
-        currentAttendanceCamera = cameraType;
-        attendanceFrontCam.classList.remove('active');
-        attendanceBackCam.classList.remove('active');
-        if (cameraType === 'user') attendanceFrontCam.classList.add('active');
-        else attendanceBackCam.classList.add('active');
-        startAttendanceCamera();
-    }
-    
-    function switchRegisterCamera(cameraType) {
-        currentRegisterCamera = cameraType;
-        registerFrontCam.classList.remove('active');
-        registerBackCam.classList.remove('active');
-        if (cameraType === 'user') registerFrontCam.classList.add('active');
-        else registerBackCam.classList.add('active');
-        startRegisterCamera();
-    }
-    
-    // ==================== TAKE ATTENDANCE ACTION ====================
+    // ==================== ACTIONS ====================
     async function takeAttendance() {
         const selectedDate = attendanceDateSelect.value;
-        const selectedDateText = attendanceDateSelect.options[attendanceDateSelect.selectedIndex]?.text;
-        
         if (!selectedDate) {
-            updateStatus(attendanceStatusDiv, "⚠️ Please select a date first", "warning");
+            updateStatus(attendanceStatusDiv, "⚠️ Select a date first", "warning");
             return;
         }
         
-        if (isProcessing) { 
-            updateStatus(attendanceStatusDiv, "Please wait...", "warning"); 
-            return; 
-        }
-        
-        if (!modelsLoaded) { 
-            await loadModels(); 
-            if (!modelsLoaded) return; 
-        }
-        
+        if (isProcessing) return;
+        if (!modelsLoaded) { await loadModels(); if (!modelsLoaded) return; }
         if (!attendanceVideo.videoWidth) {
             await startAttendanceCamera();
             setTimeout(() => takeAttendance(), 1500);
@@ -771,73 +689,52 @@
         
         try {
             const detection = await getFaceWithDescriptor(attendanceVideo);
-            
             if (!detection || !detection.descriptor) {
-                updateStatus(attendanceStatusDiv, "😞 No face detected. Try better lighting!", "error");
-                isProcessing = false;
-                captureAttendanceBtn.disabled = false;
+                updateStatus(attendanceStatusDiv, "😞 No face detected", "error");
                 return;
             }
             
-            updateStatus(attendanceStatusDiv, "🧠 Matching...", "info");
             const match = findBestMatch(detection.descriptor, 0.6);
-            
             if (!match) {
-                updateStatus(attendanceStatusDiv, "❌ Face not registered. Please register first.", "error");
-                isProcessing = false;
-                captureAttendanceBtn.disabled = false;
+                updateStatus(attendanceStatusDiv, "❌ Face not registered", "error");
                 return;
             }
             
             const person = membersList.find(m => m.name === match.name);
             if (!person) {
-                updateStatus(attendanceStatusDiv, `❌ ${match.name} not found in member list`, "error");
-                isProcessing = false;
-                captureAttendanceBtn.disabled = false;
+                updateStatus(attendanceStatusDiv, `❌ ${match.name} not found`, "error");
                 return;
             }
             
             updateStatus(attendanceStatusDiv, `✅ Recognized: ${match.name}`, "success");
-            
             const result = await markAttendance(match.name, selectedDate);
             
             if (result.success) {
                 if (result.alreadyMarked) {
-                    updateStatus(attendanceStatusDiv, `⚠️ ${match.name} already marked for ${selectedDateText}`, "warning");
+                    updateStatus(attendanceStatusDiv, `⚠️ ${match.name} already marked`, "warning");
                 } else {
-                    updateStatus(attendanceStatusDiv, `✅ ${match.name} marked present for ${selectedDateText}`, "success");
+                    updateStatus(attendanceStatusDiv, `✅ ${match.name} marked`, "success");
                     await loadAttendanceForDate(selectedDate);
                 }
-                updateDebug(attendanceDebugDiv, `✓ Attendance marked for ${match.name}`, 'success');
-            } else {
-                updateStatus(attendanceStatusDiv, `⚠️ Could not mark attendance: ${result.error}`, "error");
             }
         } catch (error) {
             updateStatus(attendanceStatusDiv, `Error: ${error.message}`, "error");
-            updateDebug(attendanceDebugDiv, `Error: ${error.message}`, 'error');
         } finally {
             isProcessing = false;
             captureAttendanceBtn.disabled = false;
         }
     }
     
-    // ==================== REGISTER FACE ACTION ====================
     async function registerFace() {
         if (isProcessing) return;
         
         const name = newUserNameInput.value.trim();
         if (!name) {
-            updateStatus(registerStatusDiv, "⚠️ Please enter name", "error");
+            updateStatus(registerStatusDiv, "⚠️ Enter name", "error");
             return;
         }
         
-        updateDebug(registerDebugDiv, `Starting registration for: ${name}`, 'info');
-        
-        if (!modelsLoaded) { 
-            await loadModels(); 
-            if (!modelsLoaded) return; 
-        }
-        
+        if (!modelsLoaded) { await loadModels(); if (!modelsLoaded) return; }
         if (!registerVideo.videoWidth) {
             await startRegisterCamera();
             setTimeout(() => registerFace(), 1500);
@@ -850,36 +747,35 @@
         
         try {
             const detection = await getFaceWithDescriptor(registerVideo);
-            
             if (!detection || !detection.descriptor) {
-                updateStatus(registerStatusDiv, "😞 No face detected. Try better lighting!", "error");
-                updateDebug(registerDebugDiv, "No face detected", 'error');
-                isProcessing = false;
-                captureRegisterBtn.disabled = false;
+                updateStatus(registerStatusDiv, "😞 No face detected", "error");
                 return;
             }
             
-            updateStatus(registerStatusDiv, "💾 Saving...", "info");
-            const result = await saveFaceToLocal(name, detection.descriptor);
+            const newDesc = { name, descriptor: Array.from(detection.descriptor) };
+            const existing = faceDescriptorsDB.map(f => ({ name: f.name, descriptor: Array.from(f.descriptor) }));
+            const idx = existing.findIndex(f => f.name === name);
+            if (idx !== -1) existing[idx] = newDesc;
+            else existing.push(newDesc);
             
-            if (result.success) {
-                updateStatus(registerStatusDiv, `✅ Registered ${name}!`, "success");
-                updateDebug(registerDebugDiv, `✓ Successfully registered ${name}`, 'success');
-                newUserNameInput.value = '';
-                updateDebug(registerDebugDiv, `Total registered: ${faceDescriptorsDB.length}`, 'info');
-            } else {
-                updateStatus(registerStatusDiv, `❌ Failed to save`, "error");
-            }
+            localStorage.setItem('face_descriptors', JSON.stringify(existing));
+            
+            const newDescFloat = { name, descriptor: new Float32Array(detection.descriptor) };
+            const memIdx = faceDescriptorsDB.findIndex(f => f.name === name);
+            if (memIdx !== -1) faceDescriptorsDB[memIdx] = newDescFloat;
+            else faceDescriptorsDB.push(newDescFloat);
+            
+            updateStatus(registerStatusDiv, `✅ Registered ${name}!`, "success");
+            updateDebug(registerDebugDiv, `✓ Registered ${name}`, 'success');
+            newUserNameInput.value = '';
         } catch (error) {
             updateStatus(registerStatusDiv, `Error: ${error.message}`, "error");
-            updateDebug(registerDebugDiv, `Error: ${error.message}`, 'error');
         } finally {
             isProcessing = false;
             captureRegisterBtn.disabled = false;
         }
     }
     
-    // ==================== MODE SWITCHING ====================
     function setMode(mode) {
         if (mode === "attendance") {
             attendancePanelDiv.classList.add("active-panel");
@@ -898,7 +794,28 @@
         }
     }
     
-    // ==================== INITIALIZATION ====================
+    // ==================== TEST API ====================
+    async function testAPI() {
+        updateDebug(attendanceDebugDiv, "=== TESTING API CONNECTION ===", 'info');
+        
+        // Test 1: Direct fetch
+        updateDebug(attendanceDebugDiv, "Test 1: Direct fetch with CORS", 'info');
+        const directResult = await testDirectFetch();
+        
+        // Test 2: JSONP
+        updateDebug(attendanceDebugDiv, "Test 2: JSONP request", 'info');
+        const jsonpResult = await callAppsScript('getSheetInfo');
+        
+        updateDebug(attendanceDebugDiv, "=== TEST RESULTS ===", 'info');
+        updateDebug(attendanceDebugDiv, `Direct fetch: ${directResult ? 'SUCCESS' : 'FAILED'}`, directResult ? 'success' : 'error');
+        updateDebug(attendanceDebugDiv, `JSONP: ${jsonpResult?.success ? 'SUCCESS' : 'FAILED'}`, jsonpResult?.success ? 'success' : 'error');
+        
+        if (jsonpResult?.success) {
+            updateDebug(attendanceDebugDiv, `Dates found: ${jsonpResult.totalDates || 0}`, 'success');
+        }
+    }
+    
+    // ==================== INIT ====================
     async function init() {
         attendanceVideo = document.getElementById('attendanceVideo');
         attendanceCanvas = document.getElementById('attendanceCanvas');
@@ -920,48 +837,50 @@
         setTimeout(setupCanvas, 100);
         window.addEventListener('resize', setupCanvas);
         
-        attendanceFrontCam.onclick = () => switchAttendanceCamera('user');
-        attendanceBackCam.onclick = () => switchAttendanceCamera('environment');
-        registerFrontCam.onclick = () => switchRegisterCamera('user');
-        registerBackCam.onclick = () => switchRegisterCamera('environment');
+        attendanceFrontCam.onclick = () => { currentAttendanceCamera = 'user'; startAttendanceCamera(); };
+        attendanceBackCam.onclick = () => { currentAttendanceCamera = 'environment'; startAttendanceCamera(); };
+        registerFrontCam.onclick = () => { currentRegisterCamera = 'user'; startRegisterCamera(); };
+        registerBackCam.onclick = () => { currentRegisterCamera = 'environment'; startRegisterCamera(); };
         
         captureAttendanceBtn.onclick = takeAttendance;
         captureRegisterBtn.onclick = registerFace;
+        testApiBtn.onclick = testAPI;
         takeAttendanceBtn.onclick = () => setMode("attendance");
         registerFaceBtn.onclick = () => setMode("register");
         
         attendanceDateSelect.onchange = async () => {
-            currentSelectedDate = attendanceDateSelect.value;
-            if (currentSelectedDate && currentSelectedDate !== '') {
-                await loadAttendanceForDate(currentSelectedDate);
-            }
+            const selectedDate = attendanceDateSelect.value;
+            if (selectedDate) await loadAttendanceForDate(selectedDate);
         };
         
         updateDebug(attendanceDebugDiv, "🚀 Starting application...", 'info');
         
-        // Initialize TensorFlow
         try {
             await tf.setBackend('webgl');
             await tf.ready();
-            updateDebug(attendanceDebugDiv, `🚀 Engine: WebGL (Fast Mode)`, 'success');
+            updateDebug(attendanceDebugDiv, `🚀 Engine: WebGL`, 'success');
         } catch (e) {
             await tf.setBackend('cpu');
             await tf.ready();
-            updateDebug(attendanceDebugDiv, `⚠️ Engine: CPU (Slow Mode)`, 'warning');
+            updateDebug(attendanceDebugDiv, `⚠️ Engine: CPU`, 'warning');
         }
         
-        // Load data from Apps Script
-        await loadDates();
-        await loadMembers();
         await loadFaceDescriptors();
         await loadModels();
         await startAttendanceCamera();
         
-        updateDebug(attendanceDebugDiv, "✅ System Ready! Select a date, then look at camera", 'success');
-        updateDebug(attendanceDebugDiv, `📊 Total dates loaded: ${dateList.length}`, 'info');
-        updateDebug(attendanceDebugDiv, `👥 Total members loaded: ${membersList.length}`, 'info');
-        updateDebug(attendanceDebugDiv, `👤 Total faces registered: ${faceDescriptorsDB.length}`, 'info');
-        updateStatus(attendanceStatusDiv, "✅ System Ready! Select a date, then look at camera", "success");
+        // Try to load data
+        const datesLoaded = await loadDates();
+        const membersLoaded = await loadMembers();
+        
+        updateDebug(attendanceDebugDiv, "✅ System Ready!", 'success');
+        updateDebug(attendanceDebugDiv, `📊 Dates loaded: ${dateList.length}`, datesLoaded ? 'success' : 'error');
+        updateDebug(attendanceDebugDiv, `👥 Members loaded: ${membersList.length}`, membersLoaded ? 'success' : 'error');
+        updateDebug(attendanceDebugDiv, `👤 Faces registered: ${faceDescriptorsDB.length}`, 'info');
+        
+        if (!datesLoaded || !membersLoaded) {
+            updateDebug(attendanceDebugDiv, "⚠️ Click 'Test API Connection' button to debug", 'warning');
+        }
     }
     
     window.onload = init;
