@@ -196,11 +196,12 @@
             font-size: 10px;
             z-index: 10;
         }
-        .test-btn {
-            background: #6c757d;
+        .retry-btn {
+            background: #ffc107;
+            color: #333;
             margin-top: 10px;
         }
-        .test-btn:hover { background: #5a6268; }
+        .retry-btn:hover { background: #e0a800; }
         .spinner {
             display: inline-block;
             width: 16px;
@@ -215,12 +216,6 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        .retry-btn {
-            background: #ffc107;
-            color: #333;
-            margin-top: 10px;
-        }
-        .retry-btn:hover { background: #e0a800; }
     </style>
 </head>
 <body>
@@ -372,8 +367,6 @@
                 url.searchParams.append(key, value);
             }
             
-            updateDebug(attendanceDebugDiv, `JSONP Request: ${action}`, 'info');
-            
             window[callbackName] = function(data) {
                 delete window[callbackName];
                 if (document.body.contains(script)) {
@@ -417,7 +410,71 @@
         }
     }
     
-    // ==================== LOAD ALL ATTENDANCE FOR A DATE ====================
+    // ==================== LOAD FACE DESCRIPTORS FROM SHEET2 ====================
+    async function loadFaceDescriptors() {
+        try {
+            updateDebug(attendanceDebugDiv, "👤 Loading face data from Sheet2...", 'info');
+            const result = await callAppsScript('getFaceData');
+            
+            if (result.success && result.faces) {
+                faceDescriptorsDB = result.faces.map(f => ({ 
+                    name: f.name, 
+                    descriptor: new Float32Array(f.descriptor) 
+                }));
+                updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} face descriptors from Google Sheets`, 'success');
+                return true;
+            } else {
+                updateDebug(attendanceDebugDiv, `⚠️ No face data found in Sheet2`, 'warning');
+                return true;
+            }
+        } catch(e) {
+            updateDebug(attendanceDebugDiv, `⚠️ Error loading faces: ${e.message}`, 'error');
+            return true;
+        }
+    }
+    
+    // ==================== SAVE FACE TO SHEET2 ====================
+    async function saveFaceToSheet(name, descriptorArray) {
+        try {
+            updateDebug(registerDebugDiv, `💾 Saving face for ${name} to Google Sheets...`, 'info');
+            
+            // Convert Float32Array to regular array for JSON
+            const descriptor = Array.from(descriptorArray);
+            
+            // Use POST to save face data
+            const response = await fetch(APPS_SCRIPT_URL, {
+                method: 'POST',
+                mode: 'cors',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: 'saveFace',
+                    name: name,
+                    descriptor: descriptor
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                updateDebug(registerDebugDiv, `✅ Face saved to Google Sheets for ${name}`, 'success');
+                // Also update local cache
+                faceDescriptorsDB.push({
+                    name: name,
+                    descriptor: new Float32Array(descriptorArray)
+                });
+                return { success: true };
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (err) {
+            updateDebug(registerDebugDiv, `❌ Error saving to Sheet2: ${err.message}`, 'error');
+            return { success: false, error: err.message };
+        }
+    }
+    
+    // ==================== LOAD ATTENDANCE FOR DATE ====================
     async function loadAllAttendanceForDate(date) {
         if (!date) return [];
         
@@ -448,11 +505,6 @@
                 dateList = result.dates;
                 updateDebug(attendanceDebugDiv, `✅ Found ${dateList.length} dates`, 'success');
                 
-                // Log first few dates
-                dateList.slice(0, 5).forEach(d => {
-                    updateDebug(attendanceDebugDiv, `  Date: ${d.date} (column ${d.column})`, 'info');
-                });
-                
                 attendanceDateSelect.innerHTML = '<option value="">-- Select Date --</option>';
                 dateList.forEach(dateInfo => {
                     const option = document.createElement('option');
@@ -482,11 +534,6 @@
             if (result.success && result.members && result.members.length > 0) {
                 membersList = result.members;
                 updateDebug(attendanceDebugDiv, `✅ Loaded ${membersList.length} members`, 'success');
-                
-                // Log first few members
-                membersList.slice(0, 5).forEach(m => {
-                    updateDebug(attendanceDebugDiv, `  Member: ${m.name}`, 'info');
-                });
                 return true;
             } else {
                 updateDebug(attendanceDebugDiv, `⚠️ No members found: ${result.error || 'empty response'}`, 'warning');
@@ -505,6 +552,7 @@
         
         const datesLoaded = await loadDates();
         const membersLoaded = await loadMembers();
+        const facesLoaded = await loadFaceDescriptors();
         
         dataLoaded = datesLoaded && membersLoaded;
         
@@ -513,58 +561,14 @@
             updateStatus(attendanceStatusDiv, "✅ Ready! Select a date and look at camera", "success");
             captureAttendanceBtn.disabled = false;
         } else {
-            updateDebug(attendanceDebugDiv, "⚠️ Some data failed to load. Click 'Retry Loading Data' to try again.", 'warning');
+            updateDebug(attendanceDebugDiv, "⚠️ Some data failed to load. Click 'Retry' to try again.", 'warning');
             updateStatus(attendanceStatusDiv, "⚠️ Data loading incomplete. Click 'Retry' button.", "warning");
-            captureAttendanceBtn.disabled = false; // Still enable button but show warning
+            captureAttendanceBtn.disabled = false;
         }
         
         updateDebug(attendanceDebugDiv, `📊 Dates: ${dateList.length}`, datesLoaded ? 'success' : 'error');
         updateDebug(attendanceDebugDiv, `👥 Members: ${membersList.length}`, membersLoaded ? 'success' : 'error');
-    }
-    
-    // ==================== LOAD FACE DESCRIPTORS ====================
-    async function loadFaceDescriptors() {
-        try {
-            const stored = localStorage.getItem('face_descriptors');
-            if (stored) {
-                const faces = JSON.parse(stored);
-                faceDescriptorsDB = faces.map(f => ({ 
-                    name: f.name, 
-                    descriptor: new Float32Array(f.descriptor) 
-                }));
-                updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} faces from storage`, 'success');
-            } else {
-                updateDebug(attendanceDebugDiv, `📭 No face descriptors found in storage`, 'info');
-            }
-            return true;
-        } catch(e) {
-            updateDebug(attendanceDebugDiv, `⚠️ Error parsing faces: ${e.message}`, 'error');
-            return true;
-        }
-    }
-    
-    // ==================== SAVE FACE TO LOCAL ====================
-    async function saveFaceToLocal(name, descriptorArray) {
-        try {
-            const newDesc = { name, descriptor: Array.from(descriptorArray) };
-            const existing = faceDescriptorsDB.map(f => ({ name: f.name, descriptor: Array.from(f.descriptor) }));
-            const idx = existing.findIndex(f => f.name === name);
-            if (idx !== -1) existing[idx] = newDesc;
-            else existing.push(newDesc);
-            
-            localStorage.setItem('face_descriptors', JSON.stringify(existing));
-            
-            const newDescFloat = { name, descriptor: new Float32Array(descriptorArray) };
-            const memIdx = faceDescriptorsDB.findIndex(f => f.name === name);
-            if (memIdx !== -1) faceDescriptorsDB[memIdx] = newDescFloat;
-            else faceDescriptorsDB.push(newDescFloat);
-            
-            updateDebug(registerDebugDiv, `✅ Face saved for ${name}`, 'success');
-            return { success: true };
-        } catch (err) {
-            updateDebug(registerDebugDiv, `❌ Error saving face: ${err.message}`, 'error');
-            return { success: false, error: err.message };
-        }
+        updateDebug(attendanceDebugDiv, `👤 Faces: ${faceDescriptorsDB.length}`, 'info');
     }
     
     // ==================== MARK ATTENDANCE ====================
@@ -825,13 +829,14 @@
                 return;
             }
             
-            updateStatus(registerStatusDiv, "💾 Saving...", "info");
-            const result = await saveFaceToLocal(name, detection.descriptor);
+            updateStatus(registerStatusDiv, "💾 Saving to Google Sheets...", "info");
+            const result = await saveFaceToSheet(name, detection.descriptor);
             
             if (result.success) {
                 updateStatus(registerStatusDiv, `✅ Registered ${name}!`, "success");
-                updateDebug(registerDebugDiv, `✓ Successfully registered ${name}`, 'success');
+                updateDebug(registerDebugDiv, `✓ Successfully registered ${name} to Sheet2`, 'success');
                 newUserNameInput.value = '';
+                updateDebug(registerDebugDiv, `Total faces registered: ${faceDescriptorsDB.length}`, 'info');
             } else {
                 updateStatus(registerStatusDiv, `❌ Failed to save: ${result.error}`, "error");
             }
@@ -914,16 +919,11 @@
             updateDebug(attendanceDebugDiv, `⚠️ Engine: CPU (Slow Mode)`, 'warning');
         }
         
-        await loadFaceDescriptors();
         await loadModels();
         await startAttendanceCamera();
-        
-        // Load all data
         await loadAllData();
         
         updateDebug(attendanceDebugDiv, "✅ System Ready! Select a date, then look at camera", 'success');
-        
-        // Enable button after all loading
         captureAttendanceBtn.disabled = false;
     }
     
