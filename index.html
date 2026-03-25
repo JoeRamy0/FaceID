@@ -305,7 +305,7 @@
     const registerBackCam = document.getElementById('registerBackCam');
     const attendanceDateSelect = document.getElementById('attendanceDateSelect');
     
-    function formatDate(dateValue) {
+    function formatDateToYYYYMMDD(dateValue) {
         if (!dateValue) return '';
         try {
             const d = new Date(dateValue);
@@ -347,46 +347,61 @@
     async function loadSheetData() {
         try {
             updateDebug(attendanceDebugDiv, "📥 Loading data from Google Sheets...");
-            const response = await fetch(GOOGLE_SHEETS_JSON_URL);
-            const text = await response.text();
             
-            updateDebug(attendanceDebugDiv, `📄 Received ${text.length} characters`);
+            // First try to get dates from Apps Script
+            const response = await fetch(`${APPS_SCRIPT_URL}?action=getDates`);
+            let dates = await response.json();
             
-            // Extract JSON from the Google Sheets response
+            if (dates && dates.length > 0) {
+                updateDebug(attendanceDebugDiv, `✅ Loaded ${dates.length} dates from Apps Script`);
+                
+                // Populate date dropdown with column indices
+                attendanceDateSelect.innerHTML = '<option value="">-- Select Date --</option>';
+                
+                // Store dates with column indices
+                dateHeaders = [];
+                dates.forEach((dateStr, index) => {
+                    // Find the column index for this date
+                    const dateObj = new Date(dateStr);
+                    const columnIndex = index + 2; // +2 because first column is names, and we need 1-indexed
+                    
+                    dateHeaders.push({
+                        column: columnIndex,
+                        date: dateObj,
+                        dateStr: dateStr
+                    });
+                    
+                    const option = document.createElement('option');
+                    option.value = columnIndex;
+                    option.textContent = dateStr;
+                    attendanceDateSelect.appendChild(option);
+                });
+                
+                updateDebug(attendanceDebugDiv, `📅 Added ${dateHeaders.length} dates to dropdown`);
+                return true;
+            }
+            
+            // Fallback: Load from published JSON
+            updateDebug(attendanceDebugDiv, "Falling back to published JSON...");
+            const jsonResponse = await fetch(GOOGLE_SHEETS_JSON_URL);
+            const text = await jsonResponse.text();
+            
             const jsonStart = text.indexOf('{');
             const jsonEnd = text.lastIndexOf('}');
             const jsonStr = text.substring(jsonStart, jsonEnd + 1);
-            
-            updateDebug(attendanceDebugDiv, `📊 Parsing JSON (${jsonStr.length} chars)...`);
-            
             const data = JSON.parse(jsonStr);
             
             const rows = data.table.rows;
-            updateDebug(attendanceDebugDiv, `📋 Total rows: ${rows.length}`);
-            
             const headerRow = rows[0];
+            
             if (!headerRow) {
                 throw new Error('No header row found');
             }
             
-            updateDebug(attendanceDebugDiv, `📋 Header has ${headerRow.c.length} columns`);
-            
-            // Debug: Log all header cells
-            let headerDebug = '';
-            for (let i = 0; i < Math.min(headerRow.c.length, 20); i++) {
-                if (headerRow.c[i] && headerRow.c[i].v) {
-                    headerDebug += `[${i}] ${headerRow.c[i].v.toString().substring(0, 20)} | `;
-                }
-            }
-            updateDebug(attendanceDebugDiv, `📋 Header preview: ${headerDebug}...`);
-            
             // Parse dates from header row
             dateHeaders = [];
-            let skippedCount = 0;
-            let processedCount = 0;
             
             for (let i = 1; i < headerRow.c.length; i++) {
-                processedCount++;
                 const cell = headerRow.c[i];
                 if (cell && cell.v) {
                     const cellValue = cell.v.toString().trim();
@@ -395,38 +410,31 @@
                     if (cellValue === 'العدد' || cellValue === 'Total' || cellValue === 'المجموع' || 
                         cellValue === 'الحضور' || cellValue === 'الغياب' || cellValue === 'نسبة' ||
                         cellValue.includes('العدد') || cellValue === '') {
-                        skippedCount++;
                         continue;
                     }
                     
                     // Try to parse as date
                     let dateValue = null;
-                    let parsedDate = null;
                     
                     if (cell.v instanceof Date) {
                         dateValue = cell.v;
-                        parsedDate = formatDate(dateValue);
                     } else if (typeof cell.v === 'string') {
-                        // Try different date formats
                         const testDate = new Date(cell.v);
                         if (!isNaN(testDate.getTime())) {
                             dateValue = testDate;
-                            parsedDate = formatDate(dateValue);
                         }
                     }
                     
-                    if (dateValue && !isNaN(dateValue.getTime()) && parsedDate && parsedDate !== '') {
+                    if (dateValue && !isNaN(dateValue.getTime())) {
+                        const dateStr = formatDateToYYYYMMDD(dateValue);
                         dateHeaders.push({
                             column: i + 1,
                             date: dateValue,
-                            dateStr: parsedDate
+                            dateStr: dateStr
                         });
-                        updateDebug(attendanceDebugDiv, `✅ Date found: Column ${i+1} = ${parsedDate}`);
                     }
                 }
             }
-            
-            updateDebug(attendanceDebugDiv, `📊 Processed ${processedCount} columns, skipped ${skippedCount}, found ${dateHeaders.length} dates`);
             
             // Sort dates chronologically
             dateHeaders.sort((a, b) => a.date - b.date);
@@ -442,15 +450,7 @@
             
             updateDebug(attendanceDebugDiv, `📅 Added ${dateHeaders.length} dates to dropdown`);
             
-            // Show first 5 and last 5 dates
-            if (dateHeaders.length > 0) {
-                const firstDates = dateHeaders.slice(0, 5).map(d => d.dateStr).join(', ');
-                const lastDates = dateHeaders.slice(-5).map(d => d.dateStr).join(', ');
-                updateDebug(attendanceDebugDiv, `📅 First dates: ${firstDates}`);
-                updateDebug(attendanceDebugDiv, `📅 Last dates: ${lastDates}`);
-            }
-            
-            // Load members from rows (skip header row)
+            // Load members
             const members = [];
             for (let i = 1; i < rows.length; i++) {
                 const row = rows[i];
@@ -468,6 +468,7 @@
             membersList = members;
             updateDebug(attendanceDebugDiv, `✅ Loaded ${membersList.length} members`);
             return true;
+            
         } catch (err) {
             updateDebug(attendanceDebugDiv, `❌ Error loading data: ${err.message}`, true);
             return false;
@@ -475,7 +476,7 @@
     }
     
     // ==================== JSONP CALL (BYPASSES CORS!) ====================
-    function jsonpRequest(url, callback) {
+    function jsonpRequest(url) {
         return new Promise((resolve, reject) => {
             const callbackName = `jsonp_callback_${++jsonpCallbackId}`;
             window[callbackName] = function(data) {
@@ -504,7 +505,7 @@
         });
     }
     
-    // ==================== MARK ATTENDANCE USING JSONP (NO CORS!) ====================
+    // ==================== MARK ATTENDANCE USING JSONP ====================
     async function markAttendanceInSheet(name, rowIndex, columnIndex) {
         try {
             updateDebug(attendanceDebugDiv, `📤 Marking attendance for ${name} at row ${rowIndex}, column ${columnIndex}...`);
@@ -518,7 +519,7 @@
         }
     }
     
-    // ==================== FACE DATA STORAGE (Local) ====================
+    // ==================== FACE DATA STORAGE ====================
     async function loadFaceDescriptors() {
         const stored = localStorage.getItem('face_descriptors');
         if (stored) {
