@@ -170,7 +170,7 @@
             background: #f8f9fa;
             padding: 0.5rem;
             border-radius: 0.5rem;
-            max-height: 200px;
+            max-height: 150px;
             overflow-y: auto;
             font-family: monospace;
         }
@@ -262,7 +262,7 @@
     // ==================== CONFIGURATION ====================
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbMd7ZvHyMVS_yUK6ANUEn4TYhLNe9o4hHz26q3Fp2a1yMhq6FlWSmgzvhBa4-MS2nug/exec";
     
-    // Google Sheets published JSON URL for reading members and dates (NO CORS!)
+    // Google Sheets published JSON URL for reading members and dates (no CORS)
     const SHEET_ID = '1VYIPqwlbTAA8_NvXT6pUMxIcT8f6Jq2hoayGt1UMNr0';
     const SHEET_GID = '0';
     const GOOGLE_SHEETS_JSON_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${SHEET_GID}`;
@@ -305,7 +305,7 @@
     const registerBackCam = document.getElementById('registerBackCam');
     const attendanceDateSelect = document.getElementById('attendanceDateSelect');
     
-    function formatDateToYYYYMMDD(dateValue) {
+    function formatDate(dateValue) {
         if (!dateValue) return '';
         try {
             const d = new Date(dateValue);
@@ -335,7 +335,7 @@
         const prefix = isError ? '❌' : '✅';
         element.innerHTML = `${prefix} [${timestamp}] ${message}<br>` + element.innerHTML;
         const lines = element.innerHTML.split('<br>');
-        if (lines.length > 30) element.innerHTML = lines.slice(0, 30).join('<br>');
+        if (lines.length > 20) element.innerHTML = lines.slice(0, 20).join('<br>');
         console.log(message);
     }
     
@@ -343,131 +343,13 @@
         if (element) element.style.width = percent + '%';
     }
     
-    // ==================== LOAD MEMBERS AND DATES FROM PUBLISHED GOOGLE SHEETS (NO CORS!) ====================
-    async function loadSheetData() {
-        try {
-            updateDebug(attendanceDebugDiv, "📥 Loading data from Google Sheets...");
-            const response = await fetch(GOOGLE_SHEETS_JSON_URL);
-            const text = await response.text();
-            
-            updateDebug(attendanceDebugDiv, `📄 Received ${text.length} characters`);
-            
-            // Extract JSON from the Google Sheets response
-            const jsonStart = text.indexOf('{');
-            const jsonEnd = text.lastIndexOf('}');
-            const jsonStr = text.substring(jsonStart, jsonEnd + 1);
-            
-            updateDebug(attendanceDebugDiv, `📊 Parsing JSON...`);
-            
-            const data = JSON.parse(jsonStr);
-            
-            const rows = data.table.rows;
-            updateDebug(attendanceDebugDiv, `📋 Total rows: ${rows.length}`);
-            
-            const headerRow = rows[0];
-            if (!headerRow) {
-                throw new Error('No header row found');
-            }
-            
-            updateDebug(attendanceDebugDiv, `📋 Header has ${headerRow.c.length} columns`);
-            
-            // Parse dates from header row
-            dateHeaders = [];
-            let dateCount = 0;
-            
-            for (let i = 1; i < headerRow.c.length; i++) {
-                const cell = headerRow.c[i];
-                if (cell && cell.v) {
-                    const cellValue = cell.v.toString().trim();
-                    
-                    // Skip non-date headers
-                    if (cellValue === 'العدد' || cellValue === 'Total' || cellValue === 'المجموع' || 
-                        cellValue === 'الحضور' || cellValue === 'الغياب' || cellValue === 'نسبة' ||
-                        cellValue.includes('العدد') || cellValue === '') {
-                        continue;
-                    }
-                    
-                    // Try to parse as date
-                    let dateValue = null;
-                    
-                    if (cell.v instanceof Date) {
-                        dateValue = cell.v;
-                    } else if (typeof cell.v === 'string') {
-                        const testDate = new Date(cell.v);
-                        if (!isNaN(testDate.getTime())) {
-                            dateValue = testDate;
-                        }
-                    }
-                    
-                    if (dateValue && !isNaN(dateValue.getTime())) {
-                        const dateStr = formatDateToYYYYMMDD(dateValue);
-                        dateHeaders.push({
-                            column: i + 1, // 1-indexed column for API
-                            date: dateValue,
-                            dateStr: dateStr
-                        });
-                        dateCount++;
-                        updateDebug(attendanceDebugDiv, `✅ Date ${dateCount}: Column ${i+1} = ${dateStr}`);
-                    }
-                }
-            }
-            
-            updateDebug(attendanceDebugDiv, `📅 Found ${dateHeaders.length} dates total`);
-            
-            // Sort dates chronologically
-            dateHeaders.sort((a, b) => a.date - b.date);
-            
-            // Populate date dropdown
-            attendanceDateSelect.innerHTML = '<option value="">-- Select Date --</option>';
-            dateHeaders.forEach(dateInfo => {
-                const option = document.createElement('option');
-                option.value = dateInfo.column;
-                option.textContent = dateInfo.dateStr;
-                attendanceDateSelect.appendChild(option);
-            });
-            
-            updateDebug(attendanceDebugDiv, `📅 Added ${dateHeaders.length} dates to dropdown`);
-            
-            // Show first 5 and last 5 dates
-            if (dateHeaders.length > 0) {
-                const firstDates = dateHeaders.slice(0, 5).map(d => d.dateStr).join(', ');
-                const lastDates = dateHeaders.slice(-5).map(d => d.dateStr).join(', ');
-                updateDebug(attendanceDebugDiv, `📅 First dates: ${firstDates}`);
-                updateDebug(attendanceDebugDiv, `📅 Last dates: ${lastDates}`);
-            }
-            
-            // Load members from rows (skip header row)
-            const members = [];
-            for (let i = 1; i < rows.length; i++) {
-                const row = rows[i];
-                if (row && row.c && row.c[0] && row.c[0].v) {
-                    const name = row.c[0].v.toString().trim();
-                    if (name && name !== '' && name !== 'الأسم' && !name.includes('اجمالي') && !name.includes('الحضور') && !name.includes('الغياب')) {
-                        members.push({
-                            name: name,
-                            rowIndex: i + 1 // 1-indexed row for API
-                        });
-                    }
-                }
-            }
-            
-            membersList = members;
-            updateDebug(attendanceDebugDiv, `✅ Loaded ${membersList.length} members`);
-            return true;
-            
-        } catch (err) {
-            updateDebug(attendanceDebugDiv, `❌ Error loading data: ${err.message}`, true);
-            return false;
-        }
-    }
-    
-    // ==================== JSONP CALL FOR MARKING ATTENDANCE (BYPASSES CORS!) ====================
-    function jsonpRequest(url) {
+    // ==================== JSONP CALL (BYPASSES CORS!) ====================
+    function jsonpRequest(url, callback) {
         return new Promise((resolve, reject) => {
             const callbackName = `jsonp_callback_${++jsonpCallbackId}`;
             window[callbackName] = function(data) {
                 delete window[callbackName];
-                if (script.parentNode) script.parentNode.removeChild(script);
+                document.body.removeChild(script);
                 resolve(data);
             };
             
@@ -476,7 +358,7 @@
             script.src = `${url}${separator}callback=${callbackName}`;
             script.onerror = () => {
                 delete window[callbackName];
-                if (script.parentNode) script.parentNode.removeChild(script);
+                document.body.removeChild(script);
                 reject(new Error('JSONP request failed'));
             };
             document.body.appendChild(script);
@@ -484,28 +366,141 @@
             setTimeout(() => {
                 if (window[callbackName]) {
                     delete window[callbackName];
-                    if (script.parentNode) script.parentNode.removeChild(script);
+                    document.body.removeChild(script);
                     reject(new Error('JSONP timeout'));
                 }
-            }, 15000);
+            }, 10000);
         });
     }
     
-    // ==================== MARK ATTENDANCE USING JSONP ====================
-    async function markAttendanceInSheet(name, rowIndex, columnIndex) {
+    // ==================== LOAD MEMBERS AND DATES FROM GOOGLE SHEETS ====================
+    async function loadSheetData() {
         try {
-            updateDebug(attendanceDebugDiv, `📤 Marking attendance for ${name} at row ${rowIndex}, column ${columnIndex}...`);
+            updateDebug(attendanceDebugDiv, "📥 Loading data from Google Sheets...");
+            const response = await fetch(GOOGLE_SHEETS_JSON_URL);
+            const text = await response.text();
             
-            const url = `${APPS_SCRIPT_URL}?action=markAttendance&name=${encodeURIComponent(name)}&row=${rowIndex}&column=${columnIndex}`;
-            const result = await jsonpRequest(url);
-            return result;
+            const jsonStr = text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1);
+            const data = JSON.parse(jsonStr);
+            
+            const rows = data.table.rows;
+            
+            const headerRow = rows[0];
+            if (!headerRow) {
+                throw new Error('No header row found');
+            }
+            
+            dateHeaders = [];
+            for (let i = 1; i < headerRow.c.length; i++) {
+                const cell = headerRow.c[i];
+                if (cell && cell.v) {
+                    const cellValue = cell.v.toString().trim();
+                    
+                    if (cellValue === 'العدد' || cellValue === 'Total' || cellValue === 'المجموع' || 
+                        cellValue === 'الحضور' || cellValue === 'الغياب' || cellValue === 'نسبة' ||
+                        cellValue.includes('العدد') || cellValue === '') {
+                        continue;
+                    }
+                    
+                    let dateValue = null;
+                    if (cell.v instanceof Date) {
+                        dateValue = cell.v;
+                    } else if (typeof cell.v === 'string') {
+                        const parsed = new Date(cell.v);
+                        if (!isNaN(parsed.getTime())) {
+                            dateValue = parsed;
+                        }
+                    }
+                    
+                    if (dateValue && !isNaN(dateValue.getTime())) {
+                        dateHeaders.push({
+                            column: i + 1,
+                            date: dateValue,
+                            dateStr: formatDate(dateValue)
+                        });
+                    }
+                }
+            }
+            
+            dateHeaders.sort((a, b) => a.date - b.date);
+            
+            attendanceDateSelect.innerHTML = '<option value="">-- Select Date --</option>';
+            dateHeaders.forEach(dateInfo => {
+                const option = document.createElement('option');
+                option.value = dateInfo.column;
+                option.textContent = dateInfo.dateStr;
+                attendanceDateSelect.appendChild(option);
+            });
+            
+            updateDebug(attendanceDebugDiv, `📅 Found ${dateHeaders.length} dates`);
+            
+            const members = [];
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                if (row && row.c && row.c[0] && row.c[0].v) {
+                    const name = row.c[0].v.toString().trim();
+                    if (name && name !== '' && name !== 'الأسم' && !name.includes('اجمالي') && !name.includes('الحضور')) {
+                        members.push({
+                            name: name,
+                            rowIndex: i + 1
+                        });
+                    }
+                }
+            }
+            
+            membersList = members;
+            updateDebug(attendanceDebugDiv, `✅ Loaded ${membersList.length} members`);
+            return true;
         } catch (err) {
-            updateDebug(attendanceDebugDiv, `❌ Error: ${err.message}`, true);
-            return { success: false, error: err.message };
+            updateDebug(attendanceDebugDiv, `❌ Error loading data: ${err.message}`, true);
+            return false;
         }
     }
     
-    // ==================== FACE DATA STORAGE ====================
+    // ==================== MARK ATTENDANCE USING JSONP (NO CORS!) ====================
+    async function markAttendanceInSheet(name, rowIndex, columnIndex) {
+        return new Promise((resolve) => {
+            try {
+                updateDebug(attendanceDebugDiv, `📤 Marking attendance for ${name} at row ${rowIndex}, column ${columnIndex}...`);
+                
+                // Use JSONP to bypass CORS
+                const url = `${APPS_SCRIPT_URL}?action=markAttendance&name=${encodeURIComponent(name)}&row=${rowIndex}&column=${columnIndex}`;
+                const callbackName = `jsonp_mark_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+                
+                window[callbackName] = function(data) {
+                    delete window[callbackName];
+                    document.body.removeChild(script);
+                    resolve(data);
+                };
+                
+                const script = document.createElement('script');
+                script.src = `${url}&callback=${callbackName}`;
+                script.onerror = () => {
+                    delete window[callbackName];
+                    document.body.removeChild(script);
+                    updateDebug(attendanceDebugDiv, `❌ JSONP request failed`, true);
+                    resolve({ success: false, error: 'JSONP request failed' });
+                };
+                
+                document.body.appendChild(script);
+                
+                setTimeout(() => {
+                    if (window[callbackName]) {
+                        delete window[callbackName];
+                        document.body.removeChild(script);
+                        updateDebug(attendanceDebugDiv, `❌ JSONP timeout`, true);
+                        resolve({ success: false, error: 'Timeout' });
+                    }
+                }, 10000);
+                
+            } catch (err) {
+                updateDebug(attendanceDebugDiv, `❌ Error: ${err.message}`, true);
+                resolve({ success: false, error: err.message });
+            }
+        });
+    }
+    
+    // ==================== FACE DATA STORAGE (Local) ====================
     async function loadFaceDescriptors() {
         const stored = localStorage.getItem('face_descriptors');
         if (stored) {
