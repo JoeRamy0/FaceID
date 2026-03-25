@@ -420,6 +420,18 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        
+        .quality-meter {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            background: rgba(0,0,0,0.7);
+            padding: 4px 8px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-family: monospace;
+            z-index: 10;
+        }
     </style>
 </head>
 <body>
@@ -497,6 +509,7 @@
             <video id="registerVideo" autoplay muted playsinline></video>
             <canvas id="registerCanvas"></canvas>
             <div id="registerFaceIndicator" class="face-indicator">🔍 Position face clearly</div>
+            <div id="registerQualityMeter" class="quality-meter" style="display: none;">📏 Face size: 0%</div>
         </div>
         
         <div class="camera-selector">
@@ -541,9 +554,11 @@
     let currentAttendanceCamera = 'environment';
     let currentRegisterCamera = 'environment';
     let detectionIntervalId = null;
+    let registerDetectionInterval = null;
     let isRegistering = false;
     let isManualMarking = false;
     let autoMarkEnabled = true;
+    let registerFaceQuality = 0;
     
     // ==================== DOM ELEMENTS ====================
     const takeAttendanceBtn = document.getElementById('takeAttendanceBtn');
@@ -560,6 +575,7 @@
     const attendanceFaceIndicator = document.getElementById('attendanceFaceIndicator');
     const detectedNameDisplay = document.getElementById('detectedNameDisplay');
     const registerFaceIndicator = document.getElementById('registerFaceIndicator');
+    const registerQualityMeter = document.getElementById('registerQualityMeter');
     const attendanceFrontCam = document.getElementById('attendanceFrontCam');
     const attendanceBackCam = document.getElementById('attendanceBackCam');
     const registerFrontCam = document.getElementById('registerFrontCam');
@@ -676,7 +692,6 @@
             attendanceDateSelect.appendChild(option);
         });
         
-        // Auto-select today if available
         if (dateList.some(d => d.date === today)) {
             attendanceDateSelect.value = today;
             currentSelectedDate = today;
@@ -756,7 +771,6 @@
         return bestDistance <= threshold ? bestMatch : null;
     }
     
-    // Safe function to draw face box
     function safeDrawFaceBox(detection, canvas, ctx) {
         try {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -770,9 +784,7 @@
                 ctx.strokeRect(box.x, box.y, box.width, box.height);
                 return true;
             }
-        } catch (err) {
-            // Silent fail
-        }
+        } catch (err) {}
         return false;
     }
     
@@ -792,9 +804,6 @@
             safeDrawFaceBox(detection, canvas, ctx);
             
             if (!detection) {
-                if (indicator && !updateCurrentFace) {
-                    updateFaceIndicator(indicator, '🔍 No face', false);
-                }
                 if (updateCurrentFace) {
                     currentDetectedFace = null;
                     detectedNameDisplay.style.display = 'none';
@@ -804,12 +813,10 @@
                 return null;
             }
             
-            // Face detected
             if (indicator) {
                 updateFaceIndicator(indicator, '✅ Face detected', true);
             }
             
-            // Get descriptor
             let descriptor = detection.descriptor || detection._descriptor;
             
             if (descriptor) {
@@ -830,7 +837,6 @@
                     }
                 }
                 
-                // Auto-mark if enabled
                 if (autoMarkEnabled && match && currentSelectedDate && updateCurrentFace) {
                     const now = Date.now();
                     if (now - lastAutoMarkTime > MARK_COOLDOWN) {
@@ -839,7 +845,6 @@
                     }
                 }
                 
-                // Clean up
                 if (typeof descriptor.dispose === 'function') {
                     descriptor.dispose();
                 }
@@ -851,6 +856,139 @@
         } catch (err) {
             console.error('Detection error:', err);
             return null;
+        }
+    }
+    
+    // ==================== REGISTER FACE DETECTION WITH VISUAL FEEDBACK ====================
+    async function showRegisterFaceDetection() {
+        if (!modelsLoaded || !registerVideo || registerVideo.readyState !== 4) return;
+        
+        try {
+            const detection = await faceapi.detectSingleFace(
+                registerVideo,
+                new faceapi.TinyFaceDetectorOptions({
+                    inputSize: 224,
+                    scoreThreshold: 0.5
+                })
+            ).withFaceLandmarks();
+            
+            registerCtx.clearRect(0, 0, registerCanvas.width, registerCanvas.height);
+            
+            if (detection) {
+                const displaySize = { width: registerVideo.videoWidth, height: registerVideo.videoHeight };
+                faceapi.matchDimensions(registerCanvas, displaySize);
+                const resized = faceapi.resizeResults(detection, displaySize);
+                const box = resized.box;
+                
+                const faceArea = box.width * box.height;
+                const frameArea = registerCanvas.width * registerCanvas.height;
+                const sizeRatio = faceArea / frameArea;
+                registerFaceQuality = sizeRatio;
+                
+                let boxColor, qualityMessage, canRegister;
+                
+                if (sizeRatio > 0.15) {
+                    boxColor = '#00ff00';
+                    qualityMessage = '✅ Perfect! Ready to register';
+                    canRegister = true;
+                    updateStatus(registerStatus, "✅ Face detected! Good position. Click Register", "success");
+                    updateFaceIndicator(registerFaceIndicator, "✅ Ready to register!", true);
+                } else if (sizeRatio > 0.08) {
+                    boxColor = '#ffaa00';
+                    qualityMessage = '⚠️ Move closer to camera';
+                    canRegister = false;
+                    updateStatus(registerStatus, "⚠️ Face detected. Move closer to camera", "warning");
+                    updateFaceIndicator(registerFaceIndicator, "⚠️ Move closer", false);
+                } else {
+                    boxColor = '#ff0000';
+                    qualityMessage = '❌ Too far! Move closer';
+                    canRegister = false;
+                    updateStatus(registerStatus, "📱 Face too far. Move closer to camera", "info");
+                    updateFaceIndicator(registerFaceIndicator, "📱 Move closer", false);
+                }
+                
+                registerCtx.strokeStyle = boxColor;
+                registerCtx.lineWidth = 3;
+                registerCtx.strokeRect(box.x, box.y, box.width, box.height);
+                
+                if (detection.landmarks) {
+                    const landmarks = faceapi.resizeResults(detection.landmarks, displaySize);
+                    
+                    registerCtx.fillStyle = '#ffff00';
+                    landmarks.positions.forEach(point => {
+                        registerCtx.beginPath();
+                        registerCtx.arc(point.x, point.y, 2, 0, 2 * Math.PI);
+                        registerCtx.fill();
+                    });
+                    
+                    const leftEye = landmarks.getLeftEye();
+                    const rightEye = landmarks.getRightEye();
+                    
+                    if (leftEye.length) {
+                        registerCtx.fillStyle = '#00ff00';
+                        leftEye.forEach(point => {
+                            registerCtx.beginPath();
+                            registerCtx.arc(point.x, point.y, 3, 0, 2 * Math.PI);
+                            registerCtx.fill();
+                        });
+                    }
+                    
+                    if (rightEye.length) {
+                        registerCtx.fillStyle = '#00ff00';
+                        rightEye.forEach(point => {
+                            registerCtx.beginPath();
+                            registerCtx.arc(point.x, point.y, 3, 0, 2 * Math.PI);
+                            registerCtx.fill();
+                        });
+                    }
+                }
+                
+                registerCtx.font = 'bold 14px Arial';
+                registerCtx.fillStyle = boxColor;
+                registerCtx.shadowBlur = 0;
+                registerCtx.fillText(qualityMessage, box.x, box.y - 10);
+                
+                if (registerQualityMeter) {
+                    registerQualityMeter.style.display = 'block';
+                    registerQualityMeter.innerHTML = `📏 Face size: ${Math.round(sizeRatio * 100)}%`;
+                    registerQualityMeter.style.background = `rgba(0,0,0,0.7)`;
+                    registerQualityMeter.style.color = boxColor === '#00ff00' ? '#4caf50' : (boxColor === '#ffaa00' ? '#ffaa00' : '#ff5555');
+                }
+                
+                captureRegisterBtn.disabled = !canRegister;
+                
+            } else {
+                registerCtx.clearRect(0, 0, registerCanvas.width, registerCanvas.height);
+                registerCtx.font = 'bold 18px Arial';
+                registerCtx.fillStyle = '#ffffff';
+                registerCtx.shadowColor = 'black';
+                registerCtx.shadowBlur = 4;
+                registerCtx.fillText('🔍 No Face Detected', registerCanvas.width/2 - 90, registerCanvas.height/2);
+                registerCtx.shadowBlur = 0;
+                
+                updateStatus(registerStatus, "😞 No face detected. Look at camera", "warning");
+                updateFaceIndicator(registerFaceIndicator, "🔍 No face - look at camera", false);
+                captureRegisterBtn.disabled = true;
+                registerFaceQuality = 0;
+                if (registerQualityMeter) registerQualityMeter.style.display = 'none';
+            }
+            
+        } catch (err) {
+            console.error('Register detection error:', err);
+        }
+    }
+    
+    function startRegisterDetectionLoop() {
+        if (registerDetectionInterval) clearInterval(registerDetectionInterval);
+        registerDetectionInterval = setInterval(() => {
+            showRegisterFaceDetection();
+        }, 150);
+    }
+    
+    function stopRegisterDetectionLoop() {
+        if (registerDetectionInterval) {
+            clearInterval(registerDetectionInterval);
+            registerDetectionInterval = null;
         }
     }
     
@@ -943,6 +1081,9 @@
     async function startRegisterCamera() {
         if (registerStream) registerStream.getTracks().forEach(t => t.stop());
         registerStream = await startCamera(registerVideo, currentRegisterCamera, registerCanvas);
+        if (registerStream) {
+            startRegisterDetectionLoop();
+        }
         return !!registerStream;
     }
     
@@ -953,6 +1094,12 @@
         const name = newUserNameInput.value.trim();
         if (!name) {
             updateStatus(registerStatus, "⚠️ Please enter your name", "error");
+            return;
+        }
+        
+        if (registerFaceQuality < 0.12) {
+            updateStatus(registerStatus, "❌ Please move closer to camera so your face fills more of the frame", "error");
+            updateFaceIndicator(registerFaceIndicator, "❌ Move closer!", false);
             return;
         }
         
@@ -981,7 +1128,13 @@
             ).withFaceLandmarks().withFaceDescriptor();
             
             if (!detection) {
-                updateStatus(registerStatus, "😞 No face detected. Try better lighting", "error");
+                updateStatus(registerStatus, "😞 No face detected. Try again", "error");
+                return;
+            }
+            
+            const detectionScore = detection.score || 0;
+            if (detectionScore < 0.6) {
+                updateStatus(registerStatus, `⚠️ Face quality too low (${Math.round(detectionScore * 100)}%). Better lighting needed`, "warning");
                 return;
             }
             
@@ -996,8 +1149,15 @@
             const result = await jsonpRequest('saveFace', { name, descriptor: JSON.stringify(descriptorArray) });
             
             if (result.success) {
-                updateStatus(registerStatus, `✅ Registered ${name}!`, "success");
-                updateFaceIndicator(registerFaceIndicator, `✅ Registered!`, true);
+                updateStatus(registerStatus, `✅ Successfully registered ${name}!`, "success");
+                updateFaceIndicator(registerFaceIndicator, `✅ ${name} registered!`, true);
+                
+                registerCtx.fillStyle = 'rgba(0, 255, 0, 0.3)';
+                registerCtx.fillRect(0, 0, registerCanvas.width, registerCanvas.height);
+                setTimeout(() => {
+                    registerCtx.clearRect(0, 0, registerCanvas.width, registerCanvas.height);
+                }, 500);
+                
                 faceDescriptorsDB.push({ name, descriptor: new Float32Array(descriptorArray) });
                 newUserNameInput.value = '';
             } else {
@@ -1044,7 +1204,11 @@
             registerPanel.classList.remove('active-panel');
             takeAttendanceBtn.classList.add('active');
             registerFaceBtn.classList.remove('active');
-            if (registerStream) { registerStream.getTracks().forEach(t => t.stop()); registerStream = null; }
+            if (registerStream) { 
+                registerStream.getTracks().forEach(t => t.stop()); 
+                registerStream = null;
+            }
+            stopRegisterDetectionLoop();
             startAttendanceCamera();
             startDetectionLoop();
         } else {
@@ -1052,7 +1216,9 @@
             registerPanel.classList.add('active-panel');
             registerFaceBtn.classList.add('active');
             takeAttendanceBtn.classList.remove('active');
-            if (attendanceStream) { attendanceStream.getTracks().forEach(t => t.stop()); }
+            if (attendanceStream) { 
+                attendanceStream.getTracks().forEach(t => t.stop()); 
+            }
             stopDetectionLoop();
             startRegisterCamera();
         }
@@ -1072,7 +1238,6 @@
         registerCanvas = document.getElementById('registerCanvas');
         registerCtx = registerCanvas.getContext('2d');
         
-        // Set canvas dimensions on resize
         function setCanvasSize() {
             const wrapper = document.querySelector('.video-wrapper');
             if (wrapper) {
@@ -1088,7 +1253,6 @@
         setCanvasSize();
         window.addEventListener('resize', setCanvasSize);
         
-        // Camera buttons
         attendanceFrontCam.onclick = () => {
             currentAttendanceCamera = 'user';
             startAttendanceCamera();
@@ -1114,7 +1278,6 @@
             registerFrontCam.classList.remove('active');
         };
         
-        // Buttons
         captureRegisterBtn.onclick = registerFace;
         manualMarkBtn.onclick = manualMark;
         refreshAttendanceBtn.onclick = () => {
@@ -1133,7 +1296,8 @@
             if (currentSelectedDate) await loadAttendanceForDate(currentSelectedDate);
         };
         
-        // Start everything
+        captureRegisterBtn.disabled = true;
+        
         await loadModels();
         await loadAllData();
         await startAttendanceCamera();
@@ -1146,6 +1310,7 @@
     window.onload = init;
     window.onbeforeunload = () => {
         stopDetectionLoop();
+        stopRegisterDetectionLoop();
         if (attendanceStream) attendanceStream.getTracks().forEach(t => t.stop());
         if (registerStream) registerStream.getTracks().forEach(t => t.stop());
     };
