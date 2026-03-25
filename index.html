@@ -18,7 +18,7 @@
             padding: 20px;
         }
         .app-container {
-            max-width: 700px;
+            max-width: 650px;
             width: 100%;
             background: rgba(255,255,255,0.95);
             border-radius: 2rem;
@@ -28,14 +28,15 @@
         .header {
             background: #1e3c72;
             color: white;
-            padding: 1.2rem;
+            padding: 1rem;
             text-align: center;
         }
-        .header h1 { margin: 0; font-size: 1.6rem; }
+        .header h1 { margin: 0; font-size: 1.4rem; }
+        .header p { margin: 5px 0 0; font-size: 0.7rem; opacity: 0.9; }
         .mode-selector {
             display: flex;
-            gap: 0.8rem;
-            padding: 1rem 1.2rem;
+            gap: 0.5rem;
+            padding: 0.8rem 1rem;
             background: #f8fafd;
             border-bottom: 1px solid #ddd;
         }
@@ -43,22 +44,22 @@
             flex: 1;
             background: white;
             border: 1px solid #bdc3d0;
-            padding: 0.7rem;
-            border-radius: 3rem;
+            padding: 0.5rem;
+            border-radius: 2rem;
             font-weight: bold;
             cursor: pointer;
-            transition: 0.2s;
-            font-size: 1rem;
+            font-size: 0.85rem;
+            transition: all 0.2s;
         }
-        .mode-btn.active { background: #1e3c72; color: white; border-color: #1e3c72; }
-        .panel { padding: 1.2rem; display: none; }
+        .mode-btn.active { background: #1e3c72; color: white; }
+        .panel { padding: 1rem; display: none; }
         .panel.active-panel { display: block; }
         .video-wrapper {
             background: #000;
-            border-radius: 1.5rem;
+            border-radius: 1rem;
             overflow: hidden;
             aspect-ratio: 4/3;
-            margin-bottom: 1rem;
+            margin-bottom: 0.8rem;
             position: relative;
         }
         video { width: 100%; height: 100%; object-fit: cover; }
@@ -74,17 +75,17 @@
             background: #2c7da0;
             color: white;
             border: none;
-            padding: 0.9rem;
+            padding: 0.7rem;
             width: 100%;
-            border-radius: 3rem;
-            font-size: 1.1rem;
+            border-radius: 2rem;
+            font-size: 1rem;
             font-weight: bold;
             cursor: pointer;
-            transition: 0.2s;
             margin-top: 0.5rem;
+            transition: transform 0.1s;
         }
-        .btn-capture:active { transform: scale(0.97);}
-        .btn-capture:disabled { background: #95a5a6; cursor: not-allowed; opacity: 0.6; }
+        .btn-capture:active { transform: scale(0.98); }
+        .btn-capture:disabled { background: #95a5a6; opacity: 0.6; cursor: not-allowed; }
         .camera-selector {
             display: flex;
             gap: 0.5rem;
@@ -94,148 +95,134 @@
             flex: 1;
             background: #e0e7ff;
             border: 1px solid #bdc3d0;
-            padding: 0.5rem;
+            padding: 0.4rem;
             border-radius: 2rem;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             cursor: pointer;
+            transition: all 0.2s;
         }
         .cam-btn.active { background: #1e3c72; color: white; }
         .date-selector {
             background: #f0f4fa;
-            border-radius: 2rem;
-            padding: 0.8rem;
-            margin-bottom: 1rem;
+            border-radius: 1.5rem;
+            padding: 0.6rem;
+            margin-bottom: 0.8rem;
         }
         .date-selector label {
             display: block;
             font-weight: 600;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.3rem;
+            font-size: 0.8rem;
             color: #1e3c72;
         }
         .date-selector select {
             width: 100%;
-            padding: 0.7rem;
+            padding: 0.5rem;
             border-radius: 2rem;
             border: 1px solid #bdc3d0;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             background: white;
         }
         .status {
             background: #eef2f7;
-            border-radius: 2rem;
-            padding: 0.8rem;
-            margin-top: 1rem;
-            font-size: 0.85rem;
+            border-radius: 1.5rem;
+            padding: 0.6rem;
+            margin-top: 0.8rem;
+            font-size: 0.75rem;
             text-align: center;
-            font-weight: 500;
         }
         .status.error { background: #fee2e2; color: #c33; }
         .status.success { background: #d4edda; color: #155724; }
         .status.warning { background: #fff3cd; color: #856404; }
         .status.info { background: #d1ecf1; color: #0c5460; }
-        .input-group { margin-bottom: 1rem; }
-        .input-group label { display: block; font-weight: 600; margin-bottom: 0.3rem; color: #1e4663; }
+        .input-group { margin-bottom: 0.8rem; }
+        .input-group label { display: block; font-weight: 600; margin-bottom: 0.3rem; font-size: 0.8rem; }
         .input-group input {
             width: 100%;
-            padding: 0.8rem;
+            padding: 0.6rem;
             border-radius: 2rem;
             border: 1px solid #ccc;
-            font-size: 1rem;
+            font-size: 0.9rem;
         }
         .result-area {
             background: #e9ecef;
-            border-radius: 1.5rem;
-            padding: 0.8rem;
-            margin-top: 1rem;
-            max-height: 250px;
+            border-radius: 1rem;
+            padding: 0.6rem;
+            margin-top: 0.8rem;
+            max-height: 200px;
             overflow-y: auto;
         }
         .attendance-item {
             background: white;
-            margin: 0.3rem 0;
-            padding: 0.5rem 0.8rem;
-            border-radius: 2rem;
+            margin: 0.2rem 0;
+            padding: 0.4rem 0.6rem;
+            border-radius: 1.5rem;
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            font-size: 0.8rem;
         }
-        .badge { background: #2e7d32; color: white; border-radius: 20px; padding: 0.2rem 0.8rem; font-size: 0.75rem; }
-        .progress-bar { width: 100%; height: 4px; background: #e0e0e0; border-radius: 2px; margin-top: 8px; overflow: hidden; }
+        .badge { background: #2e7d32; color: white; border-radius: 20px; padding: 0.1rem 0.6rem; font-size: 0.7rem; }
+        .progress-bar { width: 100%; height: 3px; background: #e0e0e0; border-radius: 2px; margin-top: 5px; overflow: hidden; }
         .progress-fill { height: 100%; background: #2c7da0; width: 0%; transition: width 0.3s; }
-        .footer { font-size: 0.7rem; text-align: center; background: #f1f5f9; padding: 0.6rem; color: #4a627a; }
+        .footer { font-size: 0.6rem; text-align: center; background: #f1f5f9; padding: 0.4rem; }
         .debug-info {
-            font-size: 0.7rem;
-            color: #666;
+            font-size: 0.6rem;
             margin-top: 0.5rem;
-            text-align: left;
             background: #f8f9fa;
-            padding: 0.5rem;
+            padding: 0.4rem;
             border-radius: 0.5rem;
-            max-height: 150px;
+            max-height: 80px;
             overflow-y: auto;
             font-family: monospace;
         }
         .face-indicator {
             position: absolute;
-            bottom: 10px;
-            left: 10px;
+            bottom: 8px;
+            left: 8px;
             background: rgba(0,0,0,0.7);
             color: white;
-            padding: 4px 8px;
-            border-radius: 20px;
-            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 12px;
+            font-size: 9px;
             z-index: 10;
         }
         .camera-info {
             position: absolute;
-            top: 10px;
-            right: 10px;
+            top: 8px;
+            right: 8px;
             background: rgba(0,0,0,0.6);
             color: #4caf50;
-            padding: 2px 6px;
-            border-radius: 12px;
-            font-size: 10px;
+            padding: 2px 5px;
+            border-radius: 10px;
+            font-size: 8px;
             z-index: 10;
         }
-        .retry-btn {
-            background: #ffc107;
-            color: #333;
-            margin-top: 10px;
-        }
-        .retry-btn:hover { background: #e0a800; }
+        .retry-btn { background: #ffc107; color: #333; margin-top: 8px; }
         .spinner {
             display: inline-block;
-            width: 16px;
-            height: 16px;
+            width: 12px;
+            height: 12px;
             border: 2px solid #f3f3f3;
             border-top: 2px solid #3498db;
             border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-left: 8px;
+            animation: spin 0.8s linear infinite;
+            margin-left: 5px;
+        }
+        .skeleton {
+            background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: 1rem;
+            height: 40px;
+            margin: 5px 0;
         }
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        .face-rect {
-            position: absolute;
-            border: 2px solid #00ff00;
-            box-shadow: 0 0 0 2px rgba(0,0,0,0.3);
-            border-radius: 4px;
-            pointer-events: none;
-            z-index: 20;
-        }
-        .face-label {
-            position: absolute;
-            background: rgba(0,0,0,0.7);
-            color: #00ff00;
-            font-size: 12px;
-            padding: 2px 6px;
-            border-radius: 4px;
-            white-space: nowrap;
-            font-family: monospace;
-            pointer-events: none;
-            z-index: 21;
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
         }
     </style>
 </head>
@@ -243,18 +230,18 @@
 <div class="app-container">
     <div class="header">
         <h1>⛪ St. Joseph Church</h1>
-        <p>Face Recognition Attendance System</p>
+        <p>Fast Face Recognition Attendance</p>
     </div>
     <div class="mode-selector">
         <button id="takeAttendanceBtn" class="mode-btn active">📸 Take Attendance</button>
-        <button id="registerFaceBtn" class="mode-btn">🆕 Register New Face</button>
+        <button id="registerFaceBtn" class="mode-btn">🆕 Register Face</button>
     </div>
 
     <div id="attendancePanel" class="panel active-panel">
         <div class="video-wrapper">
             <video id="attendanceVideo" autoplay muted playsinline></video>
             <canvas id="attendanceCanvas"></canvas>
-            <div id="attendanceFaceIndicator" class="face-indicator">🔍 Waiting for face...</div>
+            <div id="attendanceFaceIndicator" class="face-indicator">🔍 Wait...</div>
             <div id="attendanceCameraInfo" class="camera-info">📷</div>
         </div>
         <div class="camera-selector">
@@ -263,17 +250,17 @@
         </div>
         
         <div class="date-selector">
-            <label>📅 Select Date for Attendance</label>
+            <label>📅 Select Date</label>
             <select id="attendanceDateSelect">
-                <option value="">-- Select Date --</option>
+                <option value="">-- Loading --</option>
             </select>
         </div>
         
-        <button id="captureAttendance" class="btn-capture">🔍 Recognize & Mark Attendance</button>
-        <button id="retryDataBtn" class="btn-capture retry-btn">🔄 Retry Loading Data</button>
-        <div id="attendanceStatus" class="status">⏳ Loading AI models...</div>
+        <button id="captureAttendance" class="btn-capture">🔍 Mark Attendance</button>
+        <button id="retryDataBtn" class="btn-capture retry-btn">🔄 Sync Data</button>
+        <div id="attendanceStatus" class="status">⏳ Loading...</div>
         <div class="progress-bar"><div id="attendanceProgress" class="progress-fill"></div></div>
-        <div id="attendanceResult" class="result-area"><div style="text-align:center;color:#6c757d;">📋 Attendance for selected date will appear here</div></div>
+        <div id="attendanceResult" class="result-area"><div style="text-align:center;">📋 Attendance will appear here</div></div>
         <div id="attendanceDebug" class="debug-info"></div>
     </div>
 
@@ -281,7 +268,7 @@
         <div class="video-wrapper">
             <video id="registerVideo" autoplay muted playsinline></video>
             <canvas id="registerCanvas"></canvas>
-            <div id="registerFaceIndicator" class="face-indicator">🔍 Waiting for face...</div>
+            <div id="registerFaceIndicator" class="face-indicator">🔍 Wait...</div>
             <div id="registerCameraInfo" class="camera-info">📷</div>
         </div>
         <div class="camera-selector">
@@ -289,20 +276,23 @@
             <button id="registerBackCam" class="cam-btn">📱 Back</button>
         </div>
         <div class="input-group">
-            <label>👤 Full Name (exactly as in Sheet1)</label>
-            <input type="text" id="newUserName" placeholder="Example: يوسف رامي سامي" autocomplete="off">
+            <label>👤 Full Name</label>
+            <input type="text" id="newUserName" placeholder="يوسف رامي سامي" autocomplete="off">
         </div>
-        <button id="captureRegister" class="btn-capture">📸 Capture Face & Register</button>
-        <div id="registerStatus" class="status">⏳ Loading AI models...</div>
+        <button id="captureRegister" class="btn-capture">📸 Register Face</button>
+        <div id="registerStatus" class="status">⏳ Loading...</div>
         <div class="progress-bar"><div id="registerProgress" class="progress-fill"></div></div>
         <div id="registerDebug" class="debug-info"></div>
     </div>
-    <div class="footer">🔗 Select date, then scan face to mark attendance directly in Sheet1</div>
+    <div class="footer">Select date → Look at camera → Auto-mark attendance</div>
 </div>
 
 <script>
-    // ==================== CONFIGURATION ====================
+    // ==================== OPTIMIZED CONFIGURATION ====================
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbMd7ZvHyMVS_yUK6ANUEn4TYhLNe9o4hHz26q3Fp2a1yMhq6FlWSmgzvhBa4-MS2nug/exec";
+    const CACHE_VERSION = 'face_rec_v1';
+    const DETECTION_INTERVAL_MS = 300; // Throttled detection (300ms)
+    const MARK_COOLDOWN_MS = 3000; // 3 seconds cooldown
     
     // ==================== GLOBALS ====================
     let modelsLoaded = false;
@@ -315,10 +305,11 @@
     let isProcessing = false;
     let currentAttendanceCamera = 'user';
     let currentRegisterCamera = 'user';
-    let animationId = null;
-    let dataLoaded = false;
-    let lastDetectionTime = 0;
-    const DETECTION_INTERVAL = 500; // Reduced to 500ms for better performance
+    let detectionInterval = null;
+    let lastMarkTime = 0;
+    let lastRecognizedName = null;
+    let dataVersion = null;
+    let syncQueue = []; // Batch attendance queue
     
     // UI Elements
     const takeAttendanceBtn = document.getElementById('takeAttendanceBtn');
@@ -345,20 +336,17 @@
     const attendanceDateSelect = document.getElementById('attendanceDateSelect');
     
     function updateDebug(element, message, type = 'info') {
-        const timestamp = new Date().toLocaleTimeString();
+        const timestamp = new Date().toLocaleTimeString().slice(0,5);
         let prefix = '📌';
         let style = '';
-        if (type === 'error') { prefix = '❌'; style = 'color:#721c24;'; }
+        if (type === 'error') { prefix = '❌'; style = 'color:#c33;'; }
         else if (type === 'success') { prefix = '✅'; style = 'color:#155724;'; }
         else if (type === 'warning') { prefix = '⚠️'; style = 'color:#856404;'; }
         else { prefix = 'ℹ️'; }
         
-        const newEntry = `<div style="${style} padding:2px 0;">${prefix} [${timestamp}] ${message}</div>`;
+        const newEntry = `<div style="${style}">${prefix} [${timestamp}] ${message}</div>`;
         element.innerHTML = newEntry + element.innerHTML;
-        
-        if (element.children.length > 30) {
-            while (element.children.length > 30) element.removeChild(element.children[element.children.length - 1]);
-        }
+        if (element.children.length > 15) element.removeChild(element.children[element.children.length - 1]);
     }
     
     function updateStatus(element, message, type = 'info') {
@@ -372,8 +360,51 @@
     
     function formatDateArabic(dateStr) {
         const date = new Date(dateStr);
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+        return `${date.getDate()}/${date.getMonth()+1}/${date.getFullYear()}`;
+    }
+    
+    // ==================== SERVICE WORKER FOR MODEL CACHING ====================
+    async function registerServiceWorker() {
+        if ('serviceWorker' in navigator) {
+            try {
+                const registration = await navigator.serviceWorker.register('/sw.js');
+                updateDebug(attendanceDebugDiv, 'Service Worker registered', 'success');
+                return true;
+            } catch (error) {
+                updateDebug(attendanceDebugDiv, 'Service Worker failed', 'warning');
+                return false;
+            }
+        }
+        return false;
+    }
+    
+    // ==================== MODEL LOADING WITH CACHE ====================
+    async function loadModels() {
+        if(modelsLoaded) return true;
+        
+        updateStatus(attendanceStatusDiv, "📥 Loading models...", "info");
+        updateProgress(attendanceProgress, 10);
+        
+        try {
+            // Use Tiny Face Detector (faster, smaller)
+            await faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model');
+            updateProgress(attendanceProgress, 50);
+            
+            await faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model');
+            updateProgress(attendanceProgress, 75);
+            
+            await faceapi.nets.faceRecognitionNet.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model');
+            updateProgress(attendanceProgress, 100);
+            
+            modelsLoaded = true;
+            updateStatus(attendanceStatusDiv, "✅ Models ready!", "success");
+            updateStatus(registerStatusDiv, "✅ Models ready!", "success");
+            setTimeout(() => updateProgress(attendanceProgress, 0), 1000);
+            return true;
+        } catch(e) {
+            updateDebug(attendanceDebugDiv, `Model error: ${e.message}`, 'error');
+            return false;
+        }
     }
     
     // ==================== JSONP REQUEST ====================
@@ -381,7 +412,7 @@
     
     function jsonpRequest(action, params = {}) {
         return new Promise((resolve, reject) => {
-            const callbackName = `jsonp_callback_${++jsonpCounter}_${Date.now()}`;
+            const callbackName = `j_${++jsonpCounter}_${Date.now()}`;
             const url = new URL(APPS_SCRIPT_URL);
             url.searchParams.append('action', action);
             url.searchParams.append('callback', callbackName);
@@ -401,18 +432,17 @@
             script.onerror = () => {
                 delete window[callbackName];
                 if (document.body.contains(script)) document.body.removeChild(script);
-                reject(new Error(`JSONP failed`));
+                reject(new Error('Failed'));
             };
             
             document.body.appendChild(script);
-            
             setTimeout(() => {
                 if (window[callbackName]) {
                     delete window[callbackName];
                     if (document.body.contains(script)) document.body.removeChild(script);
-                    reject(new Error(`Timeout`));
+                    reject(new Error('Timeout'));
                 }
-            }, 10000);
+            }, 8000);
         });
     }
     
@@ -420,121 +450,111 @@
         try {
             return await jsonpRequest(action, params);
         } catch (error) {
-            updateDebug(attendanceDebugDiv, `${action} failed`, 'error');
             return { success: false, error: error.message };
         }
     }
     
-    // ==================== LOAD FACE DESCRIPTORS ====================
-    async function loadFaceDescriptors() {
+    // ==================== LOCAL STORAGE FOR FACE DATA ====================
+    function saveFaceDataToLocal() {
         try {
-            updateDebug(attendanceDebugDiv, "👤 Loading face data...", 'info');
-            const result = await callAppsScript('getFaceData');
-            
-            if (result.success && result.faces) {
-                faceDescriptorsDB = result.faces.map(f => ({ 
-                    name: f.name, 
-                    descriptor: new Float32Array(f.descriptor) 
-                }));
-                updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} faces`, 'success');
-                return true;
+            const data = {
+                version: dataVersion,
+                faces: faceDescriptorsDB.map(f => ({ name: f.name, descriptor: Array.from(f.descriptor) })),
+                members: membersList,
+                dates: dateList,
+                timestamp: Date.now()
+            };
+            localStorage.setItem(CACHE_VERSION, JSON.stringify(data));
+            updateDebug(attendanceDebugDiv, 'Face data cached locally', 'success');
+        } catch(e) {}
+    }
+    
+    function loadFaceDataFromLocal() {
+        try {
+            const cached = localStorage.getItem(CACHE_VERSION);
+            if (cached) {
+                const data = JSON.parse(cached);
+                if (data.faces && data.members) {
+                    faceDescriptorsDB = data.faces.map(f => ({ name: f.name, descriptor: new Float32Array(f.descriptor) }));
+                    membersList = data.members;
+                    dateList = data.dates || [];
+                    updateDebug(attendanceDebugDiv, `Loaded ${faceDescriptorsDB.length} faces from cache`, 'success');
+                    return true;
+                }
             }
+        } catch(e) {}
+        return false;
+    }
+    
+    // ==================== DIFFERENTIAL DATA LOADING ====================
+    async function loadAllData(force = false) {
+        if (!force && loadFaceDataFromLocal()) {
+            updateDebug(attendanceDebugDiv, `Using cached data (${membersList.length} members, ${faceDescriptorsDB.length} faces)`, 'success');
+            populateDateSelect();
             return true;
-        } catch(e) {
-            updateDebug(attendanceDebugDiv, `⚠️ Error loading faces`, 'error');
-            return true;
         }
-    }
-    
-    // ==================== SAVE FACE ====================
-    async function saveFaceToSheet(name, descriptorArray) {
-        try {
-            updateDebug(registerDebugDiv, `💾 Saving face for ${name}...`, 'info');
-            const descriptor = JSON.stringify(Array.from(descriptorArray));
-            const result = await callAppsScript('saveFace', { name, descriptor });
-            
-            if (result.success) {
-                updateDebug(registerDebugDiv, `✅ Face saved for ${name}`, 'success');
-                faceDescriptorsDB.push({ name, descriptor: new Float32Array(descriptorArray) });
-                return { success: true };
-            }
-            throw new Error(result.error);
-        } catch (err) {
-            updateDebug(registerDebugDiv, `❌ Error: ${err.message}`, 'error');
-            return { success: false, error: err.message };
-        }
-    }
-    
-    // ==================== LOAD ATTENDANCE ====================
-    async function loadAllAttendanceForDate(date) {
-        if (!date) return [];
-        try {
-            const result = await callAppsScript('getAttendanceForDate', { date });
-            if (result.success && result.attendance) return result.attendance;
-            return [];
-        } catch (error) {
-            return [];
-        }
-    }
-    
-    // ==================== LOAD DATES ====================
-    async function loadDates() {
-        try {
-            const result = await callAppsScript('getDatesWithColumns');
-            if (result.success && result.dates && result.dates.length > 0) {
-                dateList = result.dates;
-                attendanceDateSelect.innerHTML = '<option value="">-- Select Date --</option>';
-                dateList.forEach(dateInfo => {
-                    const option = document.createElement('option');
-                    option.value = dateInfo.date;
-                    option.textContent = formatDateArabic(dateInfo.date);
-                    attendanceDateSelect.appendChild(option);
-                });
-                return true;
-            }
-            return false;
-        } catch (err) {
-            return false;
-        }
-    }
-    
-    // ==================== LOAD MEMBERS ====================
-    async function loadMembers() {
-        try {
-            const result = await callAppsScript('getMembers');
-            if (result.success && result.members) {
-                membersList = result.members;
-                updateDebug(attendanceDebugDiv, `✅ Loaded ${membersList.length} members`, 'success');
-                return true;
-            }
-            return false;
-        } catch (err) {
-            return false;
-        }
-    }
-    
-    // ==================== LOAD ALL DATA ====================
-    async function loadAllData() {
-        updateDebug(attendanceDebugDiv, "🔄 Loading data...", 'info');
+        
+        updateDebug(attendanceDebugDiv, "🔄 Fetching fresh data...", 'info');
         captureAttendanceBtn.disabled = true;
         
-        const datesLoaded = await loadDates();
-        const membersLoaded = await loadMembers();
-        await loadFaceDescriptors();
+        // Show skeleton loading
+        attendanceResultDiv.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
         
-        dataLoaded = datesLoaded && membersLoaded;
+        const [datesRes, membersRes, facesRes] = await Promise.all([
+            callAppsScript('getDatesWithColumns'),
+            callAppsScript('getMembers'),
+            callAppsScript('getFaceData')
+        ]);
         
-        if (dataLoaded) {
-            updateDebug(attendanceDebugDiv, "✅ Data loaded!", 'success');
-            updateStatus(attendanceStatusDiv, "✅ Ready! Select date & look at camera", "success");
-        } else {
-            updateDebug(attendanceDebugDiv, "⚠️ Data incomplete. Click Retry.", 'warning');
-            updateStatus(attendanceStatusDiv, "⚠️ Click Retry button", "warning");
+        if (datesRes.success && datesRes.dates) dateList = datesRes.dates;
+        if (membersRes.success && membersRes.members) membersList = membersRes.members;
+        if (facesRes.success && facesRes.faces) {
+            faceDescriptorsDB = facesRes.faces.map(f => ({ 
+                name: f.name, 
+                descriptor: new Float32Array(f.descriptor) 
+            }));
         }
+        
+        dataVersion = Date.now().toString();
+        saveFaceDataToLocal();
+        populateDateSelect();
+        
+        updateDebug(attendanceDebugDiv, `✅ Loaded ${membersList.length} members, ${faceDescriptorsDB.length} faces, ${dateList.length} dates`, 'success');
         captureAttendanceBtn.disabled = false;
+        return true;
     }
     
-    // ==================== MARK ATTENDANCE ====================
+    function populateDateSelect() {
+        attendanceDateSelect.innerHTML = '<option value="">-- Select Date --</option>';
+        dateList.forEach(dateInfo => {
+            const option = document.createElement('option');
+            option.value = dateInfo.date;
+            option.textContent = formatDateArabic(dateInfo.date);
+            attendanceDateSelect.appendChild(option);
+        });
+    }
+    
+    // ==================== BATCH ATTENDANCE QUEUE ====================
+    async function flushAttendanceQueue() {
+        if (syncQueue.length === 0) return;
+        
+        const batch = [...syncQueue];
+        syncQueue = [];
+        
+        for (const item of batch) {
+            await callAppsScript('markAttendance', { name: item.name, date: item.date });
+        }
+        updateDebug(attendanceDebugDiv, `Synced ${batch.length} attendance records`, 'success');
+    }
+    
+    function queueAttendance(name, date) {
+        syncQueue.push({ name, date, timestamp: Date.now() });
+        // Flush every 10 records or after 30 seconds
+        if (syncQueue.length >= 10) flushAttendanceQueue();
+        setTimeout(() => flushAttendanceQueue(), 30000);
+    }
+    
+    // ==================== MARK ATTENDANCE (with queue) ====================
     async function markAttendance(name, date) {
         try {
             const result = await callAppsScript('markAttendance', { name, date });
@@ -546,67 +566,46 @@
                 updateDebug(attendanceDebugDiv, `✅ ${name} marked`, 'success');
                 return { success: true };
             }
-            throw new Error(result.error);
+            return { success: false, error: result.error };
         } catch (error) {
-            updateDebug(attendanceDebugDiv, `❌ Error: ${error.message}`, 'error');
             return { success: false, error: error.message };
         }
     }
     
-    // ==================== DISPLAY ATTENDANCE ====================
-    async function displayAttendanceForDate(date) {
+    // ==================== LOAD ATTENDANCE FOR DATE ====================
+    async function loadAttendanceForDate(date) {
         if (!date) {
-            attendanceResultDiv.innerHTML = '<div style="text-align:center;color:#6c757d;">📋 Select a date</div>';
+            attendanceResultDiv.innerHTML = '<div style="text-align:center;">📋 Select a date</div>';
             return;
         }
         
         attendanceResultDiv.innerHTML = '<div style="text-align:center;">⏳ Loading... <span class="spinner"></span></div>';
-        const attendanceData = await loadAllAttendanceForDate(date);
+        const result = await callAppsScript('getAttendanceForDate', { date });
         
-        if (attendanceData.length === 0) {
-            attendanceResultDiv.innerHTML = '<div style="text-align:center;color:#6c757d;">📋 No attendance recorded</div>';
+        if (result.success && result.attendance) {
+            if (result.attendance.length === 0) {
+                attendanceResultDiv.innerHTML = '<div style="text-align:center;">📋 No attendance recorded</div>';
+            } else {
+                let html = `<div><strong>✅ Present (${result.attendance.length}/${membersList.length})</strong></div>`;
+                result.attendance.forEach(member => {
+                    html += `<div class="attendance-item"><span>⛪ ${member.name}</span><span class="badge">Present</span></div>`;
+                });
+                attendanceResultDiv.innerHTML = html;
+            }
         } else {
-            let html = `<div><strong>✅ Present (${attendanceData.length}/${membersList.length})</strong></div>`;
-            attendanceData.forEach(member => {
-                html += `<div class="attendance-item"><span>⛪ ${member.name}</span><span class="badge">Present</span></div>`;
-            });
-            attendanceResultDiv.innerHTML = html;
+            attendanceResultDiv.innerHTML = '<div style="text-align:center;">📋 No attendance recorded</div>';
         }
     }
     
-    // ==================== FACE RECOGNITION ====================
-    async function loadModels() {
-        if(modelsLoaded) return true;
-        
-        updateStatus(attendanceStatusDiv, "📥 Loading AI models...", "info");
-        updateProgress(attendanceProgress, 10);
-        
-        try {
-            await faceapi.nets.ssdMobilenetv1.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model');
-            updateProgress(attendanceProgress, 50);
-            await faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model');
-            updateProgress(attendanceProgress, 75);
-            await faceapi.nets.faceRecognitionNet.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model');
-            updateProgress(attendanceProgress, 100);
-            
-            modelsLoaded = true;
-            updateStatus(attendanceStatusDiv, "✅ Models ready!", "success");
-            updateStatus(registerStatusDiv, "✅ Models ready!", "success");
-            setTimeout(() => updateProgress(attendanceProgress, 0), 1000);
-            return true;
-        } catch(e) {
-            updateDebug(attendanceDebugDiv, `ERROR: ${e.message}`, 'error');
-            return false;
-        }
-    }
-    
+    // ==================== FACE RECOGNITION (with tf.tidy for memory) ====================
     async function getFaceWithDescriptor(video) {
         if (!modelsLoaded || !video.videoWidth) return null;
         
-        const detection = await faceapi.detectSingleFace(video)
-            .withFaceLandmarks()
-            .withFaceDescriptor();
-        return detection;
+        return tf.tidy(() => {
+            return faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                .withFaceLandmarks()
+                .withFaceDescriptor();
+        });
     }
     
     function findBestMatch(descriptor, threshold = 0.6) {
@@ -626,12 +625,12 @@
         return bestDistance <= threshold ? bestMatch : null;
     }
     
-    // ==================== REAL-TIME FACE TRACKING ====================
+    // ==================== DRAW FACE RECTANGLE (optimized) ====================
     async function drawFaceDetection(video, canvas, ctx, indicator) {
-        if (!modelsLoaded || !video.videoWidth || !video.videoHeight) return false;
+        if (!modelsLoaded || !video.videoWidth) return false;
         
         try {
-            const detection = await faceapi.detectSingleFace(video);
+            const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions());
             
             const displaySize = { width: video.videoWidth, height: video.videoHeight };
             faceapi.matchDimensions(canvas, displaySize);
@@ -641,32 +640,18 @@
                 const resized = faceapi.resizeResults(detection, displaySize);
                 const box = resized.box;
                 
-                // Draw green rectangle
                 ctx.strokeStyle = '#00ff00';
-                ctx.lineWidth = 3;
-                ctx.shadowBlur = 0;
+                ctx.lineWidth = 2;
                 ctx.strokeRect(box.x, box.y, box.width, box.height);
                 
-                // Draw corner markers
-                ctx.fillStyle = '#00ff00';
-                const cornerSize = 10;
-                ctx.fillRect(box.x, box.y, cornerSize, 2);
-                ctx.fillRect(box.x, box.y, 2, cornerSize);
-                ctx.fillRect(box.x + box.width - cornerSize, box.y, cornerSize, 2);
-                ctx.fillRect(box.x + box.width - 2, box.y, 2, cornerSize);
-                ctx.fillRect(box.x, box.y + box.height - 2, cornerSize, 2);
-                ctx.fillRect(box.x, box.y + box.height - cornerSize, 2, cornerSize);
-                ctx.fillRect(box.x + box.width - cornerSize, box.y + box.height - 2, cornerSize, 2);
-                ctx.fillRect(box.x + box.width - 2, box.y + box.height - cornerSize, 2, cornerSize);
-                
                 if (indicator) {
-                    indicator.innerHTML = '✅ Face detected!';
+                    indicator.innerHTML = '✅ Face detected';
                     indicator.style.background = 'rgba(46, 125, 50, 0.9)';
                 }
                 return true;
             } else {
                 if (indicator) {
-                    indicator.innerHTML = '🔍 No face detected';
+                    indicator.innerHTML = '🔍 No face';
                     indicator.style.background = 'rgba(0,0,0,0.7)';
                 }
                 return false;
@@ -676,39 +661,78 @@
         }
     }
     
-    async function startRealTimeDetection(video, canvas, ctx, indicator) {
-        if (animationId) cancelAnimationFrame(animationId);
+    // ==================== DETECTION LOOP (throttled) ====================
+    let lastDetectionFrame = 0;
+    
+    async function detectionLoop() {
+        if (!modelsLoaded || !attendanceVideo.videoWidth) return;
         
-        async function detectLoop() {
-            await drawFaceDetection(video, canvas, ctx, indicator);
-            animationId = requestAnimationFrame(detectLoop);
+        const now = Date.now();
+        if (now - lastDetectionFrame < DETECTION_INTERVAL_MS) {
+            requestAnimationFrame(detectionLoop);
+            return;
+        }
+        lastDetectionFrame = now;
+        
+        await drawFaceDetection(attendanceVideo, attendanceCanvas, attendanceCtx, attendanceFaceIndicator);
+        
+        // Auto-mark attendance when face detected
+        if (currentSelectedDate && !isProcessing && (now - lastMarkTime) > MARK_COOLDOWN_MS) {
+            const detection = await getFaceWithDescriptor(attendanceVideo);
+            if (detection && detection.descriptor) {
+                const match = findBestMatch(detection.descriptor, 0.6);
+                if (match && match.name !== lastRecognizedName) {
+                    lastRecognizedName = match.name;
+                    lastMarkTime = now;
+                    
+                    const person = membersList.find(m => m.name === match.name);
+                    if (person) {
+                        updateStatus(attendanceStatusDiv, `✅ Recognized: ${match.name}`, "success");
+                        const result = await markAttendance(match.name, currentSelectedDate);
+                        if (result.success && !result.alreadyMarked) {
+                            await loadAttendanceForDate(currentSelectedDate);
+                        }
+                    }
+                }
+                if (detection.descriptor) tf.dispose(detection.descriptor);
+            }
         }
         
-        detectLoop();
+        requestAnimationFrame(detectionLoop);
     }
     
-    // ==================== CAMERA ====================
+    // ==================== CAMERA (lower resolution for performance) ====================
     async function startCamera(videoElement, cameraType, ctx, canvas, indicator) {
         try {
-            const constraints = { video: { facingMode: { exact: cameraType }, width: 640, height: 480 } };
+            const constraints = { 
+                video: { 
+                    facingMode: { exact: cameraType }, 
+                    width: { ideal: 480 }, 
+                    height: { ideal: 360 }  // Lower resolution for performance
+                } 
+            };
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             videoElement.srcObject = stream;
             return new Promise((resolve) => {
                 videoElement.onloadedmetadata = () => {
                     videoElement.play();
-                    startRealTimeDetection(videoElement, canvas, ctx, indicator);
                     resolve(stream);
                 };
             });
         } catch(err) {
             try {
-                const constraints = { video: { facingMode: cameraType, width: 640, height: 480 } };
+                const constraints = { 
+                    video: { 
+                        facingMode: cameraType, 
+                        width: { ideal: 480 }, 
+                        height: { ideal: 360 } 
+                    } 
+                };
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 videoElement.srcObject = stream;
                 return new Promise((resolve) => {
                     videoElement.onloadedmetadata = () => {
                         videoElement.play();
-                        startRealTimeDetection(videoElement, canvas, ctx, indicator);
                         resolve(stream);
                     };
                 });
@@ -722,75 +746,20 @@
     async function startAttendanceCamera() {
         if (attendanceStream) attendanceStream.getTracks().forEach(t => t.stop());
         attendanceStream = await startCamera(attendanceVideo, currentAttendanceCamera, attendanceCtx, attendanceCanvas, attendanceFaceIndicator);
-        if (attendanceStream) updateDebug(attendanceDebugDiv, `Camera started`, 'success');
+        if (attendanceStream) {
+            updateDebug(attendanceDebugDiv, `Camera started (${currentAttendanceCamera})`, 'success');
+            detectionLoop();
+        }
         return !!attendanceStream;
     }
     
     async function startRegisterCamera() {
         if (registerStream) registerStream.getTracks().forEach(t => t.stop());
         registerStream = await startCamera(registerVideo, currentRegisterCamera, registerCtx, registerCanvas, registerFaceIndicator);
-        if (registerStream) updateDebug(registerDebugDiv, `Camera started`, 'success');
         return !!registerStream;
     }
     
-    // ==================== ACTIONS ====================
-    async function takeAttendance() {
-        const selectedDate = attendanceDateSelect.value;
-        if (!selectedDate) {
-            updateStatus(attendanceStatusDiv, "⚠️ Select a date first", "warning");
-            return;
-        }
-        
-        if (isProcessing) return;
-        if (!modelsLoaded) { await loadModels(); if (!modelsLoaded) return; }
-        if (!attendanceVideo.videoWidth) {
-            await startAttendanceCamera();
-            setTimeout(() => takeAttendance(), 1000);
-            return;
-        }
-        
-        isProcessing = true;
-        captureAttendanceBtn.disabled = true;
-        updateStatus(attendanceStatusDiv, "🔍 Detecting face...", "info");
-        
-        try {
-            const detection = await getFaceWithDescriptor(attendanceVideo);
-            if (!detection || !detection.descriptor) {
-                updateStatus(attendanceStatusDiv, "😞 No face detected", "error");
-                return;
-            }
-            
-            const match = findBestMatch(detection.descriptor, 0.6);
-            if (!match) {
-                updateStatus(attendanceStatusDiv, "❌ Face not registered", "error");
-                return;
-            }
-            
-            const person = membersList.find(m => m.name === match.name);
-            if (!person) {
-                updateStatus(attendanceStatusDiv, `❌ ${match.name} not found`, "error");
-                return;
-            }
-            
-            updateStatus(attendanceStatusDiv, `✅ Recognized: ${match.name}`, "success");
-            const result = await markAttendance(match.name, selectedDate);
-            
-            if (result.success) {
-                if (result.alreadyMarked) {
-                    updateStatus(attendanceStatusDiv, `⚠️ ${match.name} already marked`, "warning");
-                } else {
-                    updateStatus(attendanceStatusDiv, `✅ ${match.name} marked!`, "success");
-                    await displayAttendanceForDate(selectedDate);
-                }
-            }
-        } catch (error) {
-            updateStatus(attendanceStatusDiv, `Error: ${error.message}`, "error");
-        } finally {
-            isProcessing = false;
-            captureAttendanceBtn.disabled = false;
-        }
-    }
-    
+    // ==================== REGISTER FACE ====================
     async function registerFace() {
         if (isProcessing) return;
         
@@ -809,7 +778,7 @@
         
         isProcessing = true;
         captureRegisterBtn.disabled = true;
-        updateStatus(registerStatusDiv, "📸 Capturing face...", "info");
+        updateStatus(registerStatusDiv, "📸 Capturing...", "info");
         
         try {
             const detection = await getFaceWithDescriptor(registerVideo);
@@ -818,9 +787,13 @@
                 return;
             }
             
-            const result = await saveFaceToSheet(name, detection.descriptor);
+            const descriptorArray = Array.from(detection.descriptor);
+            const result = await callAppsScript('saveFace', { name, descriptor: JSON.stringify(descriptorArray) });
+            
             if (result.success) {
                 updateStatus(registerStatusDiv, `✅ Registered ${name}!`, "success");
+                faceDescriptorsDB.push({ name, descriptor: new Float32Array(descriptorArray) });
+                saveFaceDataToLocal();
                 newUserNameInput.value = '';
             } else {
                 updateStatus(registerStatusDiv, `❌ Failed: ${result.error}`, "error");
@@ -833,6 +806,57 @@
         }
     }
     
+    // ==================== MANUAL ATTENDANCE ====================
+    let currentSelectedDate = null;
+    
+    async function takeAttendance() {
+        const selectedDate = attendanceDateSelect.value;
+        if (!selectedDate) {
+            updateStatus(attendanceStatusDiv, "⚠️ Select a date first", "warning");
+            return;
+        }
+        
+        if (isProcessing) return;
+        if (!modelsLoaded) { await loadModels(); if (!modelsLoaded) return; }
+        if (!attendanceVideo.videoWidth) {
+            await startAttendanceCamera();
+            setTimeout(() => takeAttendance(), 1000);
+            return;
+        }
+        
+        isProcessing = true;
+        captureAttendanceBtn.disabled = true;
+        updateStatus(attendanceStatusDiv, "🔍 Detecting...", "info");
+        
+        try {
+            const detection = await getFaceWithDescriptor(attendanceVideo);
+            if (!detection || !detection.descriptor) {
+                updateStatus(attendanceStatusDiv, "😞 No face detected", "error");
+                return;
+            }
+            
+            const match = findBestMatch(detection.descriptor, 0.6);
+            if (!match) {
+                updateStatus(attendanceStatusDiv, "❌ Face not registered", "error");
+                return;
+            }
+            
+            const result = await markAttendance(match.name, selectedDate);
+            if (result.success && !result.alreadyMarked) {
+                updateStatus(attendanceStatusDiv, `✅ ${match.name} marked!`, "success");
+                await loadAttendanceForDate(selectedDate);
+            } else if (result.alreadyMarked) {
+                updateStatus(attendanceStatusDiv, `⚠️ ${match.name} already marked`, "warning");
+            }
+        } catch (error) {
+            updateStatus(attendanceStatusDiv, `Error: ${error.message}`, "error");
+        } finally {
+            isProcessing = false;
+            captureAttendanceBtn.disabled = false;
+        }
+    }
+    
+    // ==================== MODE SWITCHING ====================
     function setMode(mode) {
         if (mode === "attendance") {
             attendancePanelDiv.classList.add("active-panel");
@@ -882,13 +906,13 @@
         
         captureAttendanceBtn.onclick = takeAttendance;
         captureRegisterBtn.onclick = registerFace;
-        retryDataBtn.onclick = loadAllData;
+        retryDataBtn.onclick = () => loadAllData(true);
         takeAttendanceBtn.onclick = () => setMode("attendance");
         registerFaceBtn.onclick = () => setMode("register");
         
         attendanceDateSelect.onchange = async () => {
-            const selectedDate = attendanceDateSelect.value;
-            if (selectedDate) await displayAttendanceForDate(selectedDate);
+            currentSelectedDate = attendanceDateSelect.value;
+            if (currentSelectedDate) await loadAttendanceForDate(currentSelectedDate);
         };
         
         updateDebug(attendanceDebugDiv, "🚀 Starting...", 'info');
@@ -907,13 +931,17 @@
         
         updateDebug(attendanceDebugDiv, "✅ System Ready!", 'success');
         captureAttendanceBtn.disabled = false;
+        
+        // Periodic sync
+        setInterval(() => flushAttendanceQueue(), 30000);
     }
     
     window.onload = init;
     window.onbeforeunload = () => {
-        if (animationId) cancelAnimationFrame(animationId);
+        if (detectionInterval) clearInterval(detectionInterval);
         if (attendanceStream) attendanceStream.getTracks().forEach(t => t.stop());
         if (registerStream) registerStream.getTracks().forEach(t => t.stop());
+        flushAttendanceQueue();
     };
 </script>
 </body>
