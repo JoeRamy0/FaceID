@@ -262,7 +262,7 @@
     // ==================== CONFIGURATION ====================
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbMd7ZvHyMVS_yUK6ANUEn4TYhLNe9o4hHz26q3Fp2a1yMhq6FlWSmgzvhBa4-MS2nug/exec";
     
-    // Google Sheets published JSON URL for reading members and dates (no CORS)
+    // Google Sheets published JSON URL for reading members and dates (NO CORS!)
     const SHEET_ID = '1VYIPqwlbTAA8_NvXT6pUMxIcT8f6Jq2hoayGt1UMNr0';
     const SHEET_GID = '0';
     const GOOGLE_SHEETS_JSON_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${SHEET_GID}`;
@@ -343,63 +343,37 @@
         if (element) element.style.width = percent + '%';
     }
     
-    // ==================== LOAD MEMBERS AND DATES FROM GOOGLE SHEETS ====================
+    // ==================== LOAD MEMBERS AND DATES FROM PUBLISHED GOOGLE SHEETS (NO CORS!) ====================
     async function loadSheetData() {
         try {
             updateDebug(attendanceDebugDiv, "📥 Loading data from Google Sheets...");
+            const response = await fetch(GOOGLE_SHEETS_JSON_URL);
+            const text = await response.text();
             
-            // First try to get dates from Apps Script
-            const response = await fetch(`${APPS_SCRIPT_URL}?action=getDates`);
-            let dates = await response.json();
+            updateDebug(attendanceDebugDiv, `📄 Received ${text.length} characters`);
             
-            if (dates && dates.length > 0) {
-                updateDebug(attendanceDebugDiv, `✅ Loaded ${dates.length} dates from Apps Script`);
-                
-                // Populate date dropdown with column indices
-                attendanceDateSelect.innerHTML = '<option value="">-- Select Date --</option>';
-                
-                // Store dates with column indices
-                dateHeaders = [];
-                dates.forEach((dateStr, index) => {
-                    // Find the column index for this date
-                    const dateObj = new Date(dateStr);
-                    const columnIndex = index + 2; // +2 because first column is names, and we need 1-indexed
-                    
-                    dateHeaders.push({
-                        column: columnIndex,
-                        date: dateObj,
-                        dateStr: dateStr
-                    });
-                    
-                    const option = document.createElement('option');
-                    option.value = columnIndex;
-                    option.textContent = dateStr;
-                    attendanceDateSelect.appendChild(option);
-                });
-                
-                updateDebug(attendanceDebugDiv, `📅 Added ${dateHeaders.length} dates to dropdown`);
-                return true;
-            }
-            
-            // Fallback: Load from published JSON
-            updateDebug(attendanceDebugDiv, "Falling back to published JSON...");
-            const jsonResponse = await fetch(GOOGLE_SHEETS_JSON_URL);
-            const text = await jsonResponse.text();
-            
+            // Extract JSON from the Google Sheets response
             const jsonStart = text.indexOf('{');
             const jsonEnd = text.lastIndexOf('}');
             const jsonStr = text.substring(jsonStart, jsonEnd + 1);
+            
+            updateDebug(attendanceDebugDiv, `📊 Parsing JSON...`);
+            
             const data = JSON.parse(jsonStr);
             
             const rows = data.table.rows;
-            const headerRow = rows[0];
+            updateDebug(attendanceDebugDiv, `📋 Total rows: ${rows.length}`);
             
+            const headerRow = rows[0];
             if (!headerRow) {
                 throw new Error('No header row found');
             }
             
+            updateDebug(attendanceDebugDiv, `📋 Header has ${headerRow.c.length} columns`);
+            
             // Parse dates from header row
             dateHeaders = [];
+            let dateCount = 0;
             
             for (let i = 1; i < headerRow.c.length; i++) {
                 const cell = headerRow.c[i];
@@ -428,13 +402,17 @@
                     if (dateValue && !isNaN(dateValue.getTime())) {
                         const dateStr = formatDateToYYYYMMDD(dateValue);
                         dateHeaders.push({
-                            column: i + 1,
+                            column: i + 1, // 1-indexed column for API
                             date: dateValue,
                             dateStr: dateStr
                         });
+                        dateCount++;
+                        updateDebug(attendanceDebugDiv, `✅ Date ${dateCount}: Column ${i+1} = ${dateStr}`);
                     }
                 }
             }
+            
+            updateDebug(attendanceDebugDiv, `📅 Found ${dateHeaders.length} dates total`);
             
             // Sort dates chronologically
             dateHeaders.sort((a, b) => a.date - b.date);
@@ -450,16 +428,24 @@
             
             updateDebug(attendanceDebugDiv, `📅 Added ${dateHeaders.length} dates to dropdown`);
             
-            // Load members
+            // Show first 5 and last 5 dates
+            if (dateHeaders.length > 0) {
+                const firstDates = dateHeaders.slice(0, 5).map(d => d.dateStr).join(', ');
+                const lastDates = dateHeaders.slice(-5).map(d => d.dateStr).join(', ');
+                updateDebug(attendanceDebugDiv, `📅 First dates: ${firstDates}`);
+                updateDebug(attendanceDebugDiv, `📅 Last dates: ${lastDates}`);
+            }
+            
+            // Load members from rows (skip header row)
             const members = [];
             for (let i = 1; i < rows.length; i++) {
                 const row = rows[i];
                 if (row && row.c && row.c[0] && row.c[0].v) {
                     const name = row.c[0].v.toString().trim();
-                    if (name && name !== '' && name !== 'الأسم' && !name.includes('اجمالي') && !name.includes('الحضور')) {
+                    if (name && name !== '' && name !== 'الأسم' && !name.includes('اجمالي') && !name.includes('الحضور') && !name.includes('الغياب')) {
                         members.push({
                             name: name,
-                            rowIndex: i + 1
+                            rowIndex: i + 1 // 1-indexed row for API
                         });
                     }
                 }
@@ -475,7 +461,7 @@
         }
     }
     
-    // ==================== JSONP CALL (BYPASSES CORS!) ====================
+    // ==================== JSONP CALL FOR MARKING ATTENDANCE (BYPASSES CORS!) ====================
     function jsonpRequest(url) {
         return new Promise((resolve, reject) => {
             const callbackName = `jsonp_callback_${++jsonpCallbackId}`;
