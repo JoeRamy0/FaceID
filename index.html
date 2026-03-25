@@ -435,19 +435,30 @@
             z-index: 10;
         }
         
-        .models-loading {
+        .loading-overlay {
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0,0,0,0.8);
+            background: rgba(0,0,0,0.9);
             color: white;
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 1000;
+            flex-direction: column;
+            z-index: 2000;
             font-size: 18px;
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
         }
     </style>
 </head>
@@ -546,7 +557,9 @@
         
         <div class="debug-panel" id="debugPanel">
             <strong>🔧 Status:</strong><br>
-            📦 Models: <span id="debugModels">Loading...</span><br>
+            📦 TinyFaceDetector: <span id="debugTFD">Loading...</span><br>
+            📦 FaceLandmark68: <span id="debugFL">Loading...</span><br>
+            📦 FaceRecognition: <span id="debugFR">Loading...</span><br>
             📷 Camera: <span id="debugCamera">Waiting...</span><br>
             👤 Face: <span id="debugFace">No face</span>
         </div>
@@ -557,12 +570,21 @@
     </div>
 </div>
 
+<div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+    <div>Loading AI Models...</div>
+    <div style="font-size: 12px; margin-top: 10px;" id="loadingStatus">Initializing...</div>
+</div>
+
 <script>
     // ==================== CONFIGURATION ====================
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbMd7ZvHyMVS_yUK6ANUEn4TYhLNe9o4hHz26q3Fp2a1yMhq6FlWSmgzvhBa4-MS2nug/exec";
     
     // ==================== GLOBALS ====================
     let modelsLoaded = false;
+    let tinyFaceDetectorLoaded = false;
+    let faceLandmark68Loaded = false;
+    let faceRecognitionLoaded = false;
     let attendanceVideo, attendanceCanvas, registerVideo, registerCanvas;
     let attendanceCtx, registerCtx;
     let attendanceStream = null, registerStream = null;
@@ -596,9 +618,13 @@
     const registerFaceIndicator = document.getElementById('registerFaceIndicator');
     const registerQualityMeter = document.getElementById('registerQualityMeter');
     const duplicateWarning = document.getElementById('duplicateWarning');
-    const debugModels = document.getElementById('debugModels');
+    const debugTFD = document.getElementById('debugTFD');
+    const debugFL = document.getElementById('debugFL');
+    const debugFR = document.getElementById('debugFR');
     const debugCamera = document.getElementById('debugCamera');
     const debugFace = document.getElementById('debugFace');
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const loadingStatus = document.getElementById('loadingStatus');
     const attendanceFrontCam = document.getElementById('attendanceFrontCam');
     const attendanceBackCam = document.getElementById('attendanceBackCam');
     const registerFrontCam = document.getElementById('registerFrontCam');
@@ -614,10 +640,6 @@
     function updateStatus(element, message, type) {
         element.textContent = message;
         element.className = `status ${type}`;
-    }
-    
-    function updateDebug(message) {
-        console.log(message);
     }
     
     // ==================== API CALLS ====================
@@ -684,7 +706,6 @@
                     name: f.name,
                     descriptor: new Float32Array(f.descriptor)
                 }));
-                updateDebug(`Loaded ${faceDescriptorsDB.length} faces`);
             }
             
             updateStatus(attendanceStatus, `✅ Ready! ${membersList.length} members`, "success");
@@ -803,18 +824,16 @@
     
     // ==================== ATTENDANCE DETECTION ====================
     async function detectAttendance() {
-        if (!modelsLoaded || !attendanceVideo || attendanceVideo.readyState !== 4) return;
+        if (!tinyFaceDetectorLoaded || !attendanceVideo || attendanceVideo.readyState !== 4) return;
         if (!attendanceVideo.videoWidth) return;
         
         try {
-            // First just detect face (without descriptor for speed)
             const detection = await faceapi.detectSingleFace(
                 attendanceVideo,
                 new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
             );
             
             if (detection) {
-                // Draw green box
                 const displaySize = { width: attendanceVideo.videoWidth, height: attendanceVideo.videoHeight };
                 faceapi.matchDimensions(attendanceCanvas, displaySize);
                 const resized = faceapi.resizeResults(detection, displaySize);
@@ -827,37 +846,51 @@
                 
                 attendanceFaceIndicator.innerHTML = '✅ Face detected';
                 attendanceFaceIndicator.style.background = 'rgba(40, 167, 69, 0.9)';
+                debugFace.textContent = '✅ Face detected';
                 
-                // Now get descriptor for recognition (separate call)
-                const fullDetection = await faceapi.detectSingleFace(
-                    attendanceVideo,
-                    new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
-                ).withFaceLandmarks().withFaceDescriptor();
-                
-                if (fullDetection && fullDetection.descriptor) {
-                    const match = findBestMatch(fullDetection.descriptor);
-                    
-                    if (match) {
-                        currentDetectedFace = match;
-                        detectedNameDisplay.style.display = 'block';
-                        detectedNameDisplay.innerHTML = `👤 ${match.name}`;
-                        currentFaceStatus.innerHTML = `✅ Detected: ${match.name}`;
-                        currentFaceStatus.className = 'status success';
+                // Only try recognition if all models are loaded
+                if (faceRecognitionLoaded && faceLandmark68Loaded) {
+                    try {
+                        const fullDetection = await faceapi.detectSingleFace(
+                            attendanceVideo,
+                            new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
+                        ).withFaceLandmarks().withFaceDescriptor();
                         
-                        if (autoMarkEnabled && currentSelectedDate) {
-                            const now = Date.now();
-                            if (now - lastAutoMarkTime > 3000) {
-                                lastAutoMarkTime = now;
-                                await markAttendance(match.name, currentSelectedDate);
-                                await loadAttendanceForDate(currentSelectedDate);
+                        if (fullDetection && fullDetection.descriptor) {
+                            const match = findBestMatch(fullDetection.descriptor);
+                            
+                            if (match) {
+                                currentDetectedFace = match;
+                                detectedNameDisplay.style.display = 'block';
+                                detectedNameDisplay.innerHTML = `👤 ${match.name}`;
+                                currentFaceStatus.innerHTML = `✅ Detected: ${match.name}`;
+                                currentFaceStatus.className = 'status success';
+                                debugFace.textContent = `✅ Recognized: ${match.name}`;
+                                
+                                if (autoMarkEnabled && currentSelectedDate) {
+                                    const now = Date.now();
+                                    if (now - lastAutoMarkTime > 3000) {
+                                        lastAutoMarkTime = now;
+                                        await markAttendance(match.name, currentSelectedDate);
+                                        await loadAttendanceForDate(currentSelectedDate);
+                                    }
+                                }
+                            } else {
+                                currentDetectedFace = null;
+                                detectedNameDisplay.style.display = 'none';
+                                currentFaceStatus.innerHTML = '❓ Face not registered';
+                                currentFaceStatus.className = 'status warning';
+                                debugFace.textContent = '❓ Face detected but not registered';
                             }
                         }
-                    } else {
-                        currentDetectedFace = null;
-                        detectedNameDisplay.style.display = 'none';
-                        currentFaceStatus.innerHTML = '❓ Face not registered';
-                        currentFaceStatus.className = 'status warning';
+                    } catch (err) {
+                        console.warn('Recognition error:', err);
                     }
+                } else {
+                    currentDetectedFace = null;
+                    detectedNameDisplay.style.display = 'none';
+                    currentFaceStatus.innerHTML = '📸 Face detected (recognition models loading...)';
+                    currentFaceStatus.className = 'status info';
                 }
             } else {
                 attendanceCtx.clearRect(0, 0, attendanceCanvas.width, attendanceCanvas.height);
@@ -867,15 +900,17 @@
                 detectedNameDisplay.style.display = 'none';
                 currentFaceStatus.innerHTML = '🔍 Looking for face...';
                 currentFaceStatus.className = 'status info';
+                debugFace.textContent = '❌ No face';
             }
         } catch (err) {
             console.error('Attendance detection error:', err);
+            debugFace.textContent = `Error: ${err.message}`;
         }
     }
     
     // ==================== REGISTRATION DETECTION ====================
     async function detectRegister() {
-        if (!modelsLoaded || !registerVideo || registerVideo.readyState !== 4) {
+        if (!tinyFaceDetectorLoaded || !registerVideo || registerVideo.readyState !== 4) {
             debugCamera.textContent = 'Waiting for camera...';
             return;
         }
@@ -887,7 +922,6 @@
         debugCamera.textContent = `Active (${registerVideo.videoWidth}x${registerVideo.videoHeight})`;
         
         try {
-            // Simple face detection first (without descriptor)
             const detection = await faceapi.detectSingleFace(
                 registerVideo,
                 new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
@@ -901,12 +935,11 @@
                 const resized = faceapi.resizeResults(detection, displaySize);
                 const box = resized.box;
                 
-                // Calculate face size percentage
                 const faceArea = box.width * box.height;
                 const frameArea = registerCanvas.width * registerCanvas.height;
                 const sizeRatio = faceArea / frameArea;
                 
-                debugFace.textContent = `✅ Detected! Size: ${Math.round(sizeRatio * 100)}%`;
+                debugFace.textContent = `✅ Face detected! Size: ${Math.round(sizeRatio * 100)}%`;
                 
                 let boxColor;
                 let canRegister = false;
@@ -946,43 +979,15 @@
                     }
                 }
                 
-                // Draw box
                 registerCtx.strokeStyle = boxColor;
                 registerCtx.lineWidth = 3;
                 registerCtx.strokeRect(box.x, box.y, box.width, box.height);
                 
-                // Draw guidance text
                 registerCtx.font = 'bold 14px Arial';
                 registerCtx.fillStyle = boxColor;
                 registerCtx.fillText(sizeRatio > 0.12 ? '✅ Click Register' : '📱 Move Closer', box.x, box.y - 10);
                 
                 captureRegisterBtn.disabled = !canRegister;
-                
-                // Only check for duplicates if face is well positioned
-                if (sizeRatio > 0.08 && canRegister) {
-                    try {
-                        const fullDetection = await faceapi.detectSingleFace(
-                            registerVideo,
-                            new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
-                        ).withFaceLandmarks().withFaceDescriptor();
-                        
-                        if (fullDetection && fullDetection.descriptor) {
-                            const duplicateCheck = checkForDuplicateFace(fullDetection.descriptor);
-                            if (duplicateCheck.isDuplicate) {
-                                duplicateWarning.style.display = 'block';
-                                duplicateWarning.className = 'status warning';
-                                duplicateWarning.innerHTML = `⚠️ This face matches "${duplicateCheck.name}"! Cannot register duplicate.`;
-                                captureRegisterBtn.disabled = true;
-                            } else {
-                                duplicateWarning.style.display = 'none';
-                            }
-                        }
-                    } catch (err) {
-                        console.warn('Duplicate check failed:', err);
-                    }
-                } else {
-                    duplicateWarning.style.display = 'none';
-                }
                 
             } else {
                 registerCtx.clearRect(0, 0, registerCanvas.width, registerCanvas.height);
@@ -1072,6 +1077,11 @@
             return;
         }
         
+        if (!faceRecognitionLoaded) {
+            updateStatus(registerStatus, "⏳ Face recognition models still loading...", "warning");
+            return;
+        }
+        
         updateStatus(registerStatus, "📸 Capturing face...", "info");
         captureRegisterBtn.disabled = true;
         
@@ -1117,37 +1127,52 @@
     
     // ==================== LOAD MODELS ====================
     async function loadModels() {
-        updateStatus(attendanceStatus, "📥 Loading AI models...", "info");
-        debugModels.textContent = "Loading...";
+        loadingOverlay.style.display = 'flex';
         
         try {
             // Set backend
+            loadingStatus.textContent = 'Initializing TensorFlow...';
             await tf.setBackend('webgl');
             await tf.ready();
             
-            // Load all models
             const modelUrl = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model';
             
-            // Load tiny face detector
+            // Load Tiny Face Detector
+            loadingStatus.textContent = 'Loading Tiny Face Detector...';
             await faceapi.nets.tinyFaceDetector.loadFromUri(modelUrl);
-            console.log('TinyFaceDetector loaded');
+            tinyFaceDetectorLoaded = true;
+            debugTFD.textContent = '✅ Loaded';
+            debugTFD.style.color = '#4caf50';
             
-            // Load face landmark net
+            // Load Face Landmark 68 Net
+            loadingStatus.textContent = 'Loading Face Landmark Detector...';
             await faceapi.nets.faceLandmark68Net.loadFromUri(modelUrl);
-            console.log('FaceLandmark68Net loaded');
+            faceLandmark68Loaded = true;
+            debugFL.textContent = '✅ Loaded';
+            debugFL.style.color = '#4caf50';
             
-            // Load face recognition net
+            // Load Face Recognition Net
+            loadingStatus.textContent = 'Loading Face Recognition Model (this may take a moment)...';
             await faceapi.nets.faceRecognitionNet.loadFromUri(modelUrl);
-            console.log('FaceRecognitionNet loaded');
+            faceRecognitionLoaded = true;
+            debugFR.textContent = '✅ Loaded';
+            debugFR.style.color = '#4caf50';
             
             modelsLoaded = true;
-            debugModels.textContent = "✅ Loaded!";
+            loadingStatus.textContent = 'All models loaded! Starting app...';
+            setTimeout(() => {
+                loadingOverlay.style.display = 'none';
+            }, 500);
+            
             updateStatus(attendanceStatus, "✅ Models ready!", "success");
             updateStatus(registerStatus, "✅ Models ready!", "success");
             return true;
         } catch (error) {
             console.error('Model load error:', error);
-            debugModels.textContent = `❌ Error: ${error.message}`;
+            loadingStatus.textContent = `Error: ${error.message}`;
+            debugTFD.textContent = '❌ Failed';
+            debugFL.textContent = '❌ Failed';
+            debugFR.textContent = '❌ Failed';
             updateStatus(attendanceStatus, "❌ Failed to load models", "error");
             return false;
         }
