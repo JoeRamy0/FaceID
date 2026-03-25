@@ -434,6 +434,21 @@
             font-family: monospace;
             z-index: 10;
         }
+        
+        .models-loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            font-size: 18px;
+        }
     </style>
 </head>
 <body>
@@ -792,6 +807,7 @@
         if (!attendanceVideo.videoWidth) return;
         
         try {
+            // First just detect face (without descriptor for speed)
             const detection = await faceapi.detectSingleFace(
                 attendanceVideo,
                 new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
@@ -812,11 +828,11 @@
                 attendanceFaceIndicator.innerHTML = '✅ Face detected';
                 attendanceFaceIndicator.style.background = 'rgba(40, 167, 69, 0.9)';
                 
-                // Get descriptor for recognition
+                // Now get descriptor for recognition (separate call)
                 const fullDetection = await faceapi.detectSingleFace(
                     attendanceVideo,
                     new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
-                ).withFaceDescriptor();
+                ).withFaceLandmarks().withFaceDescriptor();
                 
                 if (fullDetection && fullDetection.descriptor) {
                     const match = findBestMatch(fullDetection.descriptor);
@@ -871,6 +887,7 @@
         debugCamera.textContent = `Active (${registerVideo.videoWidth}x${registerVideo.videoHeight})`;
         
         try {
+            // Simple face detection first (without descriptor)
             const detection = await faceapi.detectSingleFace(
                 registerVideo,
                 new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
@@ -941,26 +958,30 @@
                 
                 captureRegisterBtn.disabled = !canRegister;
                 
-                // Check for duplicate if we have full detection
-                if (sizeRatio > 0.08) {
-                    const fullDetection = await faceapi.detectSingleFace(
-                        registerVideo,
-                        new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
-                    ).withFaceDescriptor();
-                    
-                    if (fullDetection && fullDetection.descriptor) {
-                        const duplicateCheck = checkForDuplicateFace(fullDetection.descriptor);
-                        if (duplicateCheck.isDuplicate) {
-                            duplicateWarning.style.display = 'block';
-                            duplicateWarning.className = 'status warning';
-                            duplicateWarning.innerHTML = `⚠️ This face matches "${duplicateCheck.name}"! Cannot register duplicate.`;
-                            captureRegisterBtn.disabled = true;
-                        } else {
-                            duplicateWarning.style.display = 'none';
-                        }
+                // Only check for duplicates if face is well positioned
+                if (sizeRatio > 0.08 && canRegister) {
+                    try {
+                        const fullDetection = await faceapi.detectSingleFace(
+                            registerVideo,
+                            new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
+                        ).withFaceLandmarks().withFaceDescriptor();
                         
-                        if (fullDetection.descriptor.dispose) fullDetection.descriptor.dispose();
+                        if (fullDetection && fullDetection.descriptor) {
+                            const duplicateCheck = checkForDuplicateFace(fullDetection.descriptor);
+                            if (duplicateCheck.isDuplicate) {
+                                duplicateWarning.style.display = 'block';
+                                duplicateWarning.className = 'status warning';
+                                duplicateWarning.innerHTML = `⚠️ This face matches "${duplicateCheck.name}"! Cannot register duplicate.`;
+                                captureRegisterBtn.disabled = true;
+                            } else {
+                                duplicateWarning.style.display = 'none';
+                            }
+                        }
+                    } catch (err) {
+                        console.warn('Duplicate check failed:', err);
                     }
+                } else {
+                    duplicateWarning.style.display = 'none';
                 }
                 
             } else {
@@ -1058,7 +1079,7 @@
             const detection = await faceapi.detectSingleFace(
                 registerVideo,
                 new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
-            ).withFaceDescriptor();
+            ).withFaceLandmarks().withFaceDescriptor();
             
             if (!detection || !detection.descriptor) {
                 updateStatus(registerStatus, "😞 No face detected. Try again", "error");
@@ -1087,6 +1108,7 @@
                 updateStatus(registerStatus, `❌ Failed: ${result.error}`, "error");
             }
         } catch (error) {
+            console.error('Register error:', error);
             updateStatus(registerStatus, `Error: ${error.message}`, "error");
         } finally {
             captureRegisterBtn.disabled = false;
@@ -1099,14 +1121,24 @@
         debugModels.textContent = "Loading...";
         
         try {
+            // Set backend
             await tf.setBackend('webgl');
             await tf.ready();
             
+            // Load all models
             const modelUrl = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model';
             
+            // Load tiny face detector
             await faceapi.nets.tinyFaceDetector.loadFromUri(modelUrl);
+            console.log('TinyFaceDetector loaded');
+            
+            // Load face landmark net
             await faceapi.nets.faceLandmark68Net.loadFromUri(modelUrl);
+            console.log('FaceLandmark68Net loaded');
+            
+            // Load face recognition net
             await faceapi.nets.faceRecognitionNet.loadFromUri(modelUrl);
+            console.log('FaceRecognitionNet loaded');
             
             modelsLoaded = true;
             debugModels.textContent = "✅ Loaded!";
@@ -1114,6 +1146,7 @@
             updateStatus(registerStatus, "✅ Models ready!", "success");
             return true;
         } catch (error) {
+            console.error('Model load error:', error);
             debugModels.textContent = `❌ Error: ${error.message}`;
             updateStatus(attendanceStatus, "❌ Failed to load models", "error");
             return false;
