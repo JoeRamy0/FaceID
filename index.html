@@ -196,10 +196,6 @@
             font-size: 10px;
             z-index: 10;
         }
-        .attendance-list {
-            max-height: 200px;
-            overflow-y: auto;
-        }
     </style>
 </head>
 <body>
@@ -235,9 +231,7 @@
         <button id="captureAttendance" class="btn-capture">🔍 Recognize & Mark Attendance</button>
         <div id="attendanceStatus" class="status">⏳ Loading AI models...</div>
         <div class="progress-bar"><div id="attendanceProgress" class="progress-fill"></div></div>
-        <div id="attendanceResult" class="result-area">
-            <div style="text-align:center;color:#6c757d;">📋 Attendance for selected date will appear here</div>
-        </div>
+        <div id="attendanceResult" class="result-area"><div style="text-align:center;color:#6c757d;">📋 Attendance for selected date will appear here</div></div>
         <div id="attendanceDebug" class="debug-info"></div>
     </div>
 
@@ -268,18 +262,25 @@
     // ==================== CONFIGURATION ====================
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbMd7ZvHyMVS_yUK6ANUEn4TYhLNe9o4hHz26q3Fp2a1yMhq6FlWSmgzvhBa4-MS2nug/exec";
     
+    // Google Sheets published JSON URL for reading members and dates (no CORS)
+    const SHEET_ID = '1VYIPqwlbTAA8_NvXT6pUMxIcT8f6Jq2hoayGt1UMNr0';
+    const SHEET_GID = '0';
+    const GOOGLE_SHEETS_JSON_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${SHEET_GID}`;
+    
+    const MODEL_URL = './models';
+    
     // ==================== GLOBALS ====================
     let modelsLoaded = false;
     let attendanceVideo, attendanceCanvas, registerVideo, registerCanvas;
     let attendanceStream = null, registerStream = null;
     let membersList = [];
     let faceDescriptorsDB = [];
-    let dateList = []; // Store dates with column mapping
+    let dateHeaders = [];
     let isProcessing = false;
     let currentAttendanceCamera = 'user';
     let currentRegisterCamera = 'user';
     let detectionInterval = null;
-    let currentSelectedDate = null;
+    let jsonpCallbackId = 0;
     
     // UI Elements
     const takeAttendanceBtn = document.getElementById('takeAttendanceBtn');
@@ -304,10 +305,24 @@
     const registerBackCam = document.getElementById('registerBackCam');
     const attendanceDateSelect = document.getElementById('attendanceDateSelect');
     
-    function formatDateArabic(dateStr) {
-        const date = new Date(dateStr);
-        const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-        return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+    function formatDate(dateValue) {
+        if (!dateValue) return '';
+        try {
+            const d = new Date(dateValue);
+            if (isNaN(d.getTime())) return '';
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        } catch(e) {
+            return '';
+        }
+    }
+    
+    function getLocalDate() {
+        const d = new Date();
+        d.setHours(d.getHours() + 2);
+        return d.toISOString().slice(0, 10);
     }
     
     function updateStatus(element, message, type = 'info') {
@@ -328,92 +343,183 @@
         if (element) element.style.width = percent + '%';
     }
     
-    // ==================== API CALLS TO APPS SCRIPT ====================
-    async function callAppsScript(action, params = {}) {
-        let url = `${APPS_SCRIPT_URL}?action=${action}`;
-        for (const [key, value] of Object.entries(params)) {
-            url += `&${key}=${encodeURIComponent(value)}`;
-        }
-        
-        try {
-            const response = await fetch(url);
-            const data = await response.json();
-            return data;
-        } catch (error) {
-            updateDebug(attendanceDebugDiv, `API Error: ${error.message}`, true);
-            return { success: false, error: error.message };
-        }
+    // ==================== JSONP CALL (BYPASSES CORS!) ====================
+    function jsonpRequest(url, callback) {
+        return new Promise((resolve, reject) => {
+            const callbackName = `jsonp_callback_${++jsonpCallbackId}`;
+            window[callbackName] = function(data) {
+                delete window[callbackName];
+                document.body.removeChild(script);
+                resolve(data);
+            };
+            
+            const separator = url.includes('?') ? '&' : '?';
+            const script = document.createElement('script');
+            script.src = `${url}${separator}callback=${callbackName}`;
+            script.onerror = () => {
+                delete window[callbackName];
+                document.body.removeChild(script);
+                reject(new Error('JSONP request failed'));
+            };
+            document.body.appendChild(script);
+            
+            setTimeout(() => {
+                if (window[callbackName]) {
+                    delete window[callbackName];
+                    document.body.removeChild(script);
+                    reject(new Error('JSONP timeout'));
+                }
+            }, 10000);
+        });
     }
     
-    // ==================== LOAD DATES FROM APPS SCRIPT ====================
-    async function loadDates() {
+    // ==================== LOAD MEMBERS AND DATES FROM GOOGLE SHEETS ====================
+    async function loadSheetData() {
         try {
-            updateDebug(attendanceDebugDiv, "📅 Loading dates from Apps Script...");
-            const result = await callAppsScript('getDatesWithColumns');
+            updateDebug(attendanceDebugDiv, "📥 Loading data from Google Sheets...");
+            const response = await fetch(GOOGLE_SHEETS_JSON_URL);
+            const text = await response.text();
             
-            if (result.success && result.dates) {
-                dateList = result.dates;
-                
-                attendanceDateSelect.innerHTML = '<option value="">-- Select Date --</option>';
-                dateList.forEach(dateInfo => {
-                    const option = document.createElement('option');
-                    option.value = dateInfo.date;
-                    option.textContent = formatDateArabic(dateInfo.date);
-                    attendanceDateSelect.appendChild(option);
-                });
-                
-                updateDebug(attendanceDebugDiv, `✅ Loaded ${dateList.length} dates`);
-                return true;
-            } else {
-                throw new Error(result.error || 'Failed to load dates');
+            const jsonStr = text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1);
+            const data = JSON.parse(jsonStr);
+            
+            const rows = data.table.rows;
+            
+            const headerRow = rows[0];
+            if (!headerRow) {
+                throw new Error('No header row found');
             }
+            
+            dateHeaders = [];
+            for (let i = 1; i < headerRow.c.length; i++) {
+                const cell = headerRow.c[i];
+                if (cell && cell.v) {
+                    const cellValue = cell.v.toString().trim();
+                    
+                    if (cellValue === 'العدد' || cellValue === 'Total' || cellValue === 'المجموع' || 
+                        cellValue === 'الحضور' || cellValue === 'الغياب' || cellValue === 'نسبة' ||
+                        cellValue.includes('العدد') || cellValue === '') {
+                        continue;
+                    }
+                    
+                    let dateValue = null;
+                    if (cell.v instanceof Date) {
+                        dateValue = cell.v;
+                    } else if (typeof cell.v === 'string') {
+                        const parsed = new Date(cell.v);
+                        if (!isNaN(parsed.getTime())) {
+                            dateValue = parsed;
+                        }
+                    }
+                    
+                    if (dateValue && !isNaN(dateValue.getTime())) {
+                        dateHeaders.push({
+                            column: i + 1,
+                            date: dateValue,
+                            dateStr: formatDate(dateValue)
+                        });
+                    }
+                }
+            }
+            
+            dateHeaders.sort((a, b) => a.date - b.date);
+            
+            attendanceDateSelect.innerHTML = '<option value="">-- Select Date --</option>';
+            dateHeaders.forEach(dateInfo => {
+                const option = document.createElement('option');
+                option.value = dateInfo.column;
+                option.textContent = dateInfo.dateStr;
+                attendanceDateSelect.appendChild(option);
+            });
+            
+            updateDebug(attendanceDebugDiv, `📅 Found ${dateHeaders.length} dates`);
+            
+            const members = [];
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                if (row && row.c && row.c[0] && row.c[0].v) {
+                    const name = row.c[0].v.toString().trim();
+                    if (name && name !== '' && name !== 'الأسم' && !name.includes('اجمالي') && !name.includes('الحضور')) {
+                        members.push({
+                            name: name,
+                            rowIndex: i + 1
+                        });
+                    }
+                }
+            }
+            
+            membersList = members;
+            updateDebug(attendanceDebugDiv, `✅ Loaded ${membersList.length} members`);
+            return true;
         } catch (err) {
-            updateDebug(attendanceDebugDiv, `❌ Error loading dates: ${err.message}`, true);
+            updateDebug(attendanceDebugDiv, `❌ Error loading data: ${err.message}`, true);
             return false;
         }
     }
     
-    // ==================== LOAD MEMBERS FROM APPS SCRIPT ====================
-    async function loadMembers() {
-        try {
-            updateDebug(attendanceDebugDiv, "👥 Loading members from Apps Script...");
-            const result = await callAppsScript('getMembers');
-            
-            if (result.success && result.members) {
-                membersList = result.members;
-                updateDebug(attendanceDebugDiv, `✅ Loaded ${membersList.length} members`);
-                return true;
-            } else {
-                throw new Error(result.error || 'Failed to load members');
+    // ==================== MARK ATTENDANCE USING JSONP (NO CORS!) ====================
+    async function markAttendanceInSheet(name, rowIndex, columnIndex) {
+        return new Promise((resolve) => {
+            try {
+                updateDebug(attendanceDebugDiv, `📤 Marking attendance for ${name} at row ${rowIndex}, column ${columnIndex}...`);
+                
+                // Use JSONP to bypass CORS
+                const url = `${APPS_SCRIPT_URL}?action=markAttendance&name=${encodeURIComponent(name)}&row=${rowIndex}&column=${columnIndex}`;
+                const callbackName = `jsonp_mark_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+                
+                window[callbackName] = function(data) {
+                    delete window[callbackName];
+                    document.body.removeChild(script);
+                    resolve(data);
+                };
+                
+                const script = document.createElement('script');
+                script.src = `${url}&callback=${callbackName}`;
+                script.onerror = () => {
+                    delete window[callbackName];
+                    document.body.removeChild(script);
+                    updateDebug(attendanceDebugDiv, `❌ JSONP request failed`, true);
+                    resolve({ success: false, error: 'JSONP request failed' });
+                };
+                
+                document.body.appendChild(script);
+                
+                setTimeout(() => {
+                    if (window[callbackName]) {
+                        delete window[callbackName];
+                        document.body.removeChild(script);
+                        updateDebug(attendanceDebugDiv, `❌ JSONP timeout`, true);
+                        resolve({ success: false, error: 'Timeout' });
+                    }
+                }, 10000);
+                
+            } catch (err) {
+                updateDebug(attendanceDebugDiv, `❌ Error: ${err.message}`, true);
+                resolve({ success: false, error: err.message });
             }
-        } catch (err) {
-            updateDebug(attendanceDebugDiv, `❌ Error loading members: ${err.message}`, true);
-            return false;
-        }
+        });
     }
     
-    // ==================== LOAD FACE DESCRIPTORS ====================
+    // ==================== FACE DATA STORAGE (Local) ====================
     async function loadFaceDescriptors() {
-        try {
-            const stored = localStorage.getItem('face_descriptors');
-            if (stored) {
+        const stored = localStorage.getItem('face_descriptors');
+        if (stored) {
+            try {
                 const faces = JSON.parse(stored);
                 faceDescriptorsDB = faces.map(f => ({ 
                     name: f.name, 
                     descriptor: new Float32Array(f.descriptor) 
                 }));
-                updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} face descriptors from local storage`);
-            } else {
-                updateDebug(attendanceDebugDiv, `📭 No face descriptors found in local storage`);
+                updateDebug(attendanceDebugDiv, `✅ Loaded ${faceDescriptorsDB.length} face descriptors`);
+                return true;
+            } catch(e) {
+                updateDebug(attendanceDebugDiv, `⚠️ Error parsing stored faces`, true);
             }
-            return true;
-        } catch(e) {
-            updateDebug(attendanceDebugDiv, `⚠️ Error parsing stored faces: ${e.message}`, true);
-            return true;
         }
+        updateDebug(attendanceDebugDiv, `📭 No stored face descriptors found`);
+        return true;
     }
     
-    // ==================== SAVE FACE TO LOCAL ====================
     async function saveFaceToLocal(name, descriptorArray) {
         try {
             const newDesc = { name, descriptor: Array.from(descriptorArray) };
@@ -429,7 +535,7 @@
             if (memIdx !== -1) faceDescriptorsDB[memIdx] = newDescFloat;
             else faceDescriptorsDB.push(newDescFloat);
             
-            updateDebug(registerDebugDiv, `✅ Face saved locally for ${name}`);
+            updateDebug(registerDebugDiv, `✅ Face saved for ${name}`);
             return { success: true };
         } catch (err) {
             updateDebug(registerDebugDiv, `❌ Error saving face: ${err.message}`, true);
@@ -437,67 +543,18 @@
         }
     }
     
-    // ==================== MARK ATTENDANCE ====================
-    async function markAttendance(name, date) {
-        try {
-            updateDebug(attendanceDebugDiv, `📤 Marking attendance for ${name} on ${date}...`);
-            const result = await callAppsScript('markAttendance', { name: name, date: date });
-            
-            if (result.success) {
-                if (result.alreadyMarked) {
-                    updateDebug(attendanceDebugDiv, `⚠️ ${name} already marked for ${date}`);
-                    return { success: true, alreadyMarked: true };
-                } else {
-                    updateDebug(attendanceDebugDiv, `✅ ${name} marked present for ${date}`);
-                    return { success: true };
-                }
-            } else {
-                throw new Error(result.error);
-            }
-        } catch (error) {
-            updateDebug(attendanceDebugDiv, `❌ Error marking attendance: ${error.message}`, true);
-            return { success: false, error: error.message };
-        }
-    }
-    
-    // ==================== CHECK ATTENDANCE STATUS ====================
-    async function checkAttendanceStatus(name, date) {
-        try {
-            const result = await callAppsScript('getAttendanceStatus', { name: name, date: date });
-            if (result.success) {
-                return result.isPresent;
-            }
-            return false;
-        } catch (error) {
-            return false;
-        }
-    }
-    
-    // ==================== LOAD ATTENDANCE FOR DATE ====================
-    async function loadAttendanceForDate(date) {
-        if (!date) {
-            attendanceResultDiv.innerHTML = '<div style="text-align:center;color:#6c757d;">📋 Select a date to view attendance</div>';
-            return;
-        }
+    function displayAttendanceForDate(selectedDateStr) {
+        const stored = localStorage.getItem('attendance_log') || '[]';
+        const log = JSON.parse(stored);
+        const dateAttendance = log.filter(entry => entry.date === selectedDateStr);
         
-        attendanceResultDiv.innerHTML = '<div style="text-align:center;">⏳ Loading attendance...</div>';
-        
-        const presentMembers = [];
-        for (const member of membersList) {
-            const isPresent = await checkAttendanceStatus(member.name, date);
-            if (isPresent) {
-                presentMembers.push(member.name);
-            }
-        }
-        
-        if (presentMembers.length === 0) {
+        attendanceResultDiv.innerHTML = '';
+        if (dateAttendance.length === 0) {
             attendanceResultDiv.innerHTML = '<div style="text-align:center;color:#6c757d;">📋 No attendance recorded for this date</div>';
         } else {
-            let html = `<div style="margin-bottom:10px;"><strong>✅ Present (${presentMembers.length}/${membersList.length})</strong></div>`;
-            presentMembers.forEach(name => {
-                html += `<div class="attendance-item"><span>⛪ ${name}</span><span class="badge">Present</span></div>`;
+            dateAttendance.forEach(entry => {
+                attendanceResultDiv.innerHTML += `<div class="attendance-item"><span>⛪ ${entry.name}</span><span class="badge">${entry.date}</span></div>`;
             });
-            attendanceResultDiv.innerHTML = html;
         }
     }
     
@@ -509,16 +566,19 @@
         updateProgress(attendanceProgress, 10);
         
         try {
-            updateDebug(attendanceDebugDiv, `Loading face-api models...`);
+            updateDebug(attendanceDebugDiv, `Loading models from: ${MODEL_URL}`);
             
-            await faceapi.nets.ssdMobilenetv1.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model');
+            await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
             updateProgress(attendanceProgress, 40);
+            updateDebug(attendanceDebugDiv, "✓ SSD MobileNet loaded");
             
-            await faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model');
+            await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
             updateProgress(attendanceProgress, 70);
+            updateDebug(attendanceDebugDiv, "✓ Face Landmark loaded");
             
-            await faceapi.nets.faceRecognitionNet.loadFromUri('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model');
+            await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
             updateProgress(attendanceProgress, 100);
+            updateDebug(attendanceDebugDiv, "✓ Face Recognition loaded");
             
             modelsLoaded = true;
             updateStatus(attendanceStatusDiv, "✅ Models ready!", "success");
@@ -527,9 +587,18 @@
             setTimeout(() => updateProgress(attendanceProgress, 0), 1000);
             return true;
         } catch(e) {
-            updateDebug(attendanceDebugDiv, `ERROR loading models: ${e.message}`, true);
+            updateDebug(attendanceDebugDiv, `ERROR: ${e.message}`, true);
             updateStatus(attendanceStatusDiv, `❌ Failed: ${e.message}`, "error");
             return false;
+        }
+    }
+    
+    async function detectFace(video) {
+        if (!modelsLoaded || !video.videoWidth) return null;
+        try {
+            return await faceapi.detectSingleFace(video);
+        } catch(e) {
+            return null;
         }
     }
     
@@ -548,6 +617,43 @@
             await new Promise(r => setTimeout(r, 500));
         }
         return null;
+    }
+    
+    async function drawDetection(video, canvas, indicator) {
+        if (!modelsLoaded || !video.videoWidth) return false;
+        
+        try {
+            const detection = await detectFace(video);
+            const displaySize = { width: video.videoWidth, height: video.videoHeight };
+            faceapi.matchDimensions(canvas, displaySize);
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (detection) {
+                const resized = faceapi.resizeResults(detection, displaySize);
+                faceapi.draw.drawDetections(canvas, [resized]);
+                if (indicator) {
+                    indicator.innerHTML = '✅ Face detected!';
+                    indicator.style.background = 'rgba(46, 125, 50, 0.9)';
+                }
+                return true;
+            } else {
+                if (indicator) {
+                    indicator.innerHTML = '🔍 No face detected';
+                    indicator.style.background = 'rgba(0,0,0,0.7)';
+                }
+                return false;
+            }
+        } catch(e) {
+            return false;
+        }
+    }
+    
+    function startDetectionLoop(video, canvas, indicator) {
+        if (detectionInterval) clearInterval(detectionInterval);
+        detectionInterval = setInterval(async () => {
+            await drawDetection(video, canvas, indicator);
+        }, 150);
     }
     
     function findBestMatch(descriptor, threshold = 0.6) {
@@ -569,11 +675,11 @@
     }
     
     // ==================== CAMERA SETUP ====================
-    async function startCamera(videoElement, canvasElement, cameraType) {
+    async function startCamera(videoElement, cameraType) {
         try {
             const constraints = { 
                 video: { 
-                    facingMode: { exact: cameraType },
+                    facingMode: cameraType,
                     width: { ideal: 1280 },
                     height: { ideal: 720 }
                 } 
@@ -587,38 +693,21 @@
                 };
             });
         } catch(err) {
-            // Fallback for devices without exact facingMode
-            try {
-                const constraints = { 
-                    video: { 
-                        facingMode: cameraType,
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    } 
-                };
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                videoElement.srcObject = stream;
-                return new Promise((resolve) => {
-                    videoElement.onloadedmetadata = () => {
-                        videoElement.play();
-                        resolve(stream);
-                    };
-                });
-            } catch(err2) {
-                updateDebug(attendanceDebugDiv, "Camera Error: " + err2.message, true);
-                return null;
-            }
+            updateDebug(attendanceDebugDiv, "Camera Error: " + err.message, true);
+            return null;
         }
     }
     
     async function startAttendanceCamera() {
         if (attendanceStream) attendanceStream.getTracks().forEach(t => t.stop());
+        if (detectionInterval) clearInterval(detectionInterval);
         
-        attendanceStream = await startCamera(attendanceVideo, attendanceCanvas, currentAttendanceCamera);
+        attendanceStream = await startCamera(attendanceVideo, currentAttendanceCamera);
         if (attendanceStream) {
             const info = document.getElementById('attendanceCameraInfo');
             if (info) info.innerHTML = currentAttendanceCamera === 'user' ? '🤳 Front' : '📱 Back';
-            updateDebug(attendanceDebugDiv, `Camera started (${currentAttendanceCamera})`);
+            updateDebug(attendanceDebugDiv, `Camera started`);
+            startDetectionLoop(attendanceVideo, attendanceCanvas, attendanceFaceIndicator);
             return true;
         }
         return false;
@@ -627,11 +716,12 @@
     async function startRegisterCamera() {
         if (registerStream) registerStream.getTracks().forEach(t => t.stop());
         
-        registerStream = await startCamera(registerVideo, registerCanvas, currentRegisterCamera);
+        registerStream = await startCamera(registerVideo, currentRegisterCamera);
         if (registerStream) {
             const info = document.getElementById('registerCameraInfo');
             if (info) info.innerHTML = currentRegisterCamera === 'user' ? '🤳 Front' : '📱 Back';
-            updateDebug(registerDebugDiv, `Camera started (${currentRegisterCamera})`);
+            updateDebug(registerDebugDiv, `Camera started`);
+            startDetectionLoop(registerVideo, registerCanvas, registerFaceIndicator);
             return true;
         }
         return false;
@@ -655,25 +745,20 @@
         startRegisterCamera();
     }
     
-    // ==================== TAKE ATTENDANCE ACTION ====================
+    // ==================== ACTIONS ====================
     async function takeAttendance() {
-        const selectedDate = attendanceDateSelect.value;
+        console.log("=== TAKE ATTENDANCE ===");
         
-        if (!selectedDate) {
+        const selectedColumn = attendanceDateSelect.value;
+        const selectedDateText = attendanceDateSelect.options[attendanceDateSelect.selectedIndex]?.text;
+        
+        if (!selectedColumn) {
             updateStatus(attendanceStatusDiv, "⚠️ Please select a date first", "warning");
             return;
         }
         
-        if (isProcessing) { 
-            updateStatus(attendanceStatusDiv, "Please wait...", "warning"); 
-            return; 
-        }
-        
-        if (!modelsLoaded) { 
-            await loadModels(); 
-            if (!modelsLoaded) return; 
-        }
-        
+        if (isProcessing) { updateStatus(attendanceStatusDiv, "Please wait...", "warning"); return; }
+        if (!modelsLoaded) { await loadModels(); if (!modelsLoaded) return; }
         if (!attendanceVideo.videoWidth) {
             await startAttendanceCamera();
             setTimeout(() => takeAttendance(), 1500);
@@ -714,30 +799,36 @@
             
             updateStatus(attendanceStatusDiv, `✅ Recognized: ${match.name}`, "success");
             
-            const result = await markAttendance(match.name, selectedDate);
+            const result = await markAttendanceInSheet(match.name, person.rowIndex, parseInt(selectedColumn));
             
-            if (result.success) {
+            if (result?.success) {
                 if (result.alreadyMarked) {
-                    updateStatus(attendanceStatusDiv, `⚠️ ${match.name} already marked for ${formatDateArabic(selectedDate)}`, "warning");
+                    updateStatus(attendanceStatusDiv, `⚠️ ${match.name} already marked for ${selectedDateText}`, "warning");
                 } else {
-                    updateStatus(attendanceStatusDiv, `✅ ${match.name} marked present for ${formatDateArabic(selectedDate)}`, "success");
-                    await loadAttendanceForDate(selectedDate);
+                    updateStatus(attendanceStatusDiv, `✅ ${match.name} marked present for ${selectedDateText}`, "success");
+                    const stored = localStorage.getItem('attendance_log') || '[]';
+                    const log = JSON.parse(stored);
+                    const alreadyMarked = log.some(entry => entry.name === match.name && entry.date === selectedDateText);
+                    if (!alreadyMarked) {
+                        log.push({ name: match.name, date: selectedDateText, timestamp: new Date().toISOString() });
+                        localStorage.setItem('attendance_log', JSON.stringify(log));
+                    }
+                    displayAttendanceForDate(selectedDateText);
                 }
                 updateDebug(attendanceDebugDiv, `✓ Attendance marked for ${match.name}`);
             } else {
-                updateStatus(attendanceStatusDiv, `⚠️ Could not mark attendance: ${result.error}`, "error");
+                updateStatus(attendanceStatusDiv, `⚠️ Could not mark attendance: ${result?.error}`, "error");
             }
         } catch (error) {
             updateStatus(attendanceStatusDiv, `Error: ${error.message}`, "error");
-            updateDebug(attendanceDebugDiv, `Error: ${error.message}`, true);
         } finally {
             isProcessing = false;
             captureAttendanceBtn.disabled = false;
         }
     }
     
-    // ==================== REGISTER FACE ACTION ====================
     async function registerFace() {
+        console.log("=== REGISTER FACE ===");
         if (isProcessing) return;
         
         const name = newUserNameInput.value.trim();
@@ -748,11 +839,7 @@
         
         updateDebug(registerDebugDiv, `Starting registration for: ${name}`);
         
-        if (!modelsLoaded) { 
-            await loadModels(); 
-            if (!modelsLoaded) return; 
-        }
-        
+        if (!modelsLoaded) { await loadModels(); if (!modelsLoaded) return; }
         if (!registerVideo.videoWidth) {
             await startRegisterCamera();
             setTimeout(() => registerFace(), 1500);
@@ -777,7 +864,7 @@
             updateStatus(registerStatusDiv, "💾 Saving...", "info");
             const result = await saveFaceToLocal(name, detection.descriptor);
             
-            if (result.success) {
+            if (result?.success) {
                 updateStatus(registerStatusDiv, `✅ Registered ${name}!`, "success");
                 updateDebug(registerDebugDiv, `✓ Successfully registered ${name}`);
                 newUserNameInput.value = '';
@@ -787,14 +874,12 @@
             }
         } catch (error) {
             updateStatus(registerStatusDiv, `Error: ${error.message}`, "error");
-            updateDebug(registerDebugDiv, `Error: ${error.message}`, true);
         } finally {
             isProcessing = false;
             captureRegisterBtn.disabled = false;
         }
     }
     
-    // ==================== MODE SWITCHING ====================
     function setMode(mode) {
         if (mode === "attendance") {
             attendancePanelDiv.classList.add("active-panel");
@@ -845,10 +930,10 @@
         takeAttendanceBtn.onclick = () => setMode("attendance");
         registerFaceBtn.onclick = () => setMode("register");
         
-        attendanceDateSelect.onchange = async () => {
-            currentSelectedDate = attendanceDateSelect.value;
-            if (currentSelectedDate && currentSelectedDate !== '') {
-                await loadAttendanceForDate(currentSelectedDate);
+        attendanceDateSelect.onchange = () => {
+            const selectedDateText = attendanceDateSelect.options[attendanceDateSelect.selectedIndex]?.text;
+            if (selectedDateText && selectedDateText !== '-- Select Date --') {
+                displayAttendanceForDate(selectedDateText);
             }
         };
         
@@ -864,15 +949,13 @@
             updateDebug(attendanceDebugDiv, `⚠️ Engine: CPU (Slow Mode)`);
         }
         
-        await loadDates();
-        await loadMembers();
+        await loadSheetData();
         await loadFaceDescriptors();
         await loadModels();
         await startAttendanceCamera();
         
         updateDebug(attendanceDebugDiv, "✅ System Ready! Select a date, then look at camera");
         updateDebug(attendanceDebugDiv, "📌 Face data saved locally, attendance marks Sheet1 directly");
-        updateStatus(attendanceStatusDiv, "✅ System Ready! Select a date, then look at camera", "success");
     }
     
     window.onload = init;
