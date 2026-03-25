@@ -1,0 +1,21 @@
+{
+    "name": "Face Attendance Pro",
+    "short_name": "Face Attend",
+    "description": "AI Face Recognition Attendance System for St. Joseph Church",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#1e3c72",
+    "theme_color": "#1e3c72",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%231e3c72'/%3E%3Ctext x='50' y='67' text-anchor='middle' fill='white' font-size='50' font-family='Arial'%3E⛪%3C/text%3E%3C/svg%3E",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any maskable"
+        }
+    ],
+    "categories": ["business", "productivity"],
+    "lang": "en",
+    "prefer_related_applications": false
+}
